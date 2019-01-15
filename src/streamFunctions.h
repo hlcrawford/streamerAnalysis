@@ -10,14 +10,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <iostream>
+#include <limits>
+#include "math.h"
+
+#include "colors.h"
 
 #define READSIZE 1024*1024
 
 #define LEDK 5
 #define EK 100 
-#define EM 500
+#define EM 400
 
-class streamFunctions : public TObject {
+class streamer : public TObject {
 
  public:
   FILE *fin;
@@ -25,7 +29,7 @@ class streamFunctions : public TObject {
   short int *wf; // raw trace buffer
   int *ledBuf, *trapBuf;
   double *pzBuf, *subBL1, *subBL2, *BL1, *BL2, *pzBLBuf;
-  std::vector<long long int> ledOUT;
+  std::vector<long int> ledOUT;
   
   int bytesRead;
   double tau;
@@ -33,8 +37,8 @@ class streamFunctions : public TObject {
   int LEDThreshold;
   
  public:
-  streamFunctions() {;}
-  ~streamFunctions() {;}
+  streamer() {;}
+  ~streamer() {;}
   int Initialize(TString inputFileName);
   int Reset(int overlap);
   int calculateLEDlevel(int index, int thresh);
@@ -50,7 +54,7 @@ class streamFunctions : public TObject {
   void setDV(double iDV) { DV = iDV; }
   void setLEDThresh(double iLEDThreshold) { LEDThreshold = iLEDThreshold; }
   
-  ClassDef(streamFunctions, 1);
+  ClassDef(streamer, 1);
 };
 
 

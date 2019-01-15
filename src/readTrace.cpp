@@ -8,8 +8,9 @@
 #include "TH2.h"
 #include "TTree.h"
 
-#include "GRETINA.h"
 #include "streamFunctions.h"
+#include "GRETINA.h"
+
 
 #define OUTPUTFILE "tr.out"
 
@@ -38,6 +39,8 @@ int main(int argc, char **argv) {
   int withBLR = 0;
   long long int BLRi = 1;
 
+  int invert = 1;
+
   std::vector<double> energies;
   
   double peak = 0;
@@ -47,19 +50,26 @@ int main(int argc, char **argv) {
     exit(1);
   }
 
-  printf("Input: %s\n", argv[1]);
-  printf("ROOT Output: %s\n", argv[5]);
-
   TString inputName = argv[1];
+  printf("Input: %s\n", argv[1]); 
   sscanf(argv[2], "%lf", &tau);
   sscanf(argv[3], "%d", &DV);  DV -= 16;
-  if (argc > 4) { sscanf(argv[4], "%d", &nReads); } else { nReads = 1000000; }
+  if (argc >= 4) { sscanf(argv[4], "%d", &nReads); } else { nReads = 1000000; }
+  if (nReads == -1) { nReads = 1000000; }
   TString rootoutputName;
-  if (argc > 5) { rootoutputName = argv[5]; } else { rootoutputName = "out.root"; }
-  if (argc > 6) { sscanf(argv[6], "%d", &ledThresh); }
-
+  if (argc >= 5) {
+    rootoutputName = argv[5];  
+    printf("ROOT Output: %s\n", argv[5]);
+  } else { 
+    rootoutputName = "out.root"; 
+    printf("ROOT Output: %s\n", "out.root");  
+  }
+  if (argc >= 6) { 
+    sscanf(argv[6], "%d", &ledThresh); 
+    printf("LED threshold = %d\n", ledThresh);
+  }
   
-  streamFunctions *data = new streamFunctions();
+  streamer *data = new streamer();
   curr = data->Initialize(inputName);
   data->setTau(tau);
   data->setDV(DV);
@@ -69,9 +79,8 @@ int main(int argc, char **argv) {
 
   g3CrystalEvent g3xtal;
   g3ChannelEvent g3ch;
-
   
-  TFile *rootOUT = new TFile(rootoutputName.Data(), "UPDATE");
+  TFile *rootOUT = new TFile(rootoutputName.Data(), "RECREATE");
   TTree *teb = new TTree("teb", "Tree - with data stuff");
   teb->Branch("g3", "g3OUT", &(g3));
 
@@ -98,14 +107,14 @@ int main(int argc, char **argv) {
     ledCrossings = data->doLEDfilter(indexStart, curr, startTS);
     ledCrossing += ledCrossings;
 
-    // printf("numberOfReads = %d, ledCrossing = %d\n", numberOfReads, ledCrossing);
+    printf("numberOfReads = %d, ledCrossing = %d\r", numberOfReads, ledCrossing);
     
     data->doVHDLtrapezoid(indexStart, curr);
     
     pzSum = data->doVHDLpolezero(indexStart, curr, pzSum, tau);
     
     //data->doBaselineRestorationCC(indexStart, curr, startTS, DV);
-    data->doBaselineRestorationM2(indexStart, curr, startTS, DV);
+    //data->doBaselineRestorationM2(indexStart, curr, startTS, DV);
 
     if(withBLR) {
       energies = data->doEnergyPeakFind(data->pzBLBuf, indexStart, curr, startTS, &pileUp);
@@ -115,16 +124,21 @@ int main(int argc, char **argv) {
 
     /* Write out the events in this chunk of data... */
     for (int i=0; i<data->ledOUT.size(); i++) {
-
       g3ch.Clear();
       g3ch.timestamp = data->ledOUT[i];
-      g3ch.eRaw = energies[i];
+      if (i < energies.size()) {
+	g3ch.eRaw = energies[i];
+      } else { g3ch.eRaw = -1000; }
       
       /* Pull out the WF */
       g3ch.wf.raw.clear();
       for (int j=-200; j<300; j++) {
 	g3ch.wf.raw.push_back(data->wf[data->ledOUT[i]-startTS+j]);
+	if (j >= -10 && j<=-4) {
+	  g3ch.baseline += (data->wf[data->ledOUT[i] - startTS+j]);
+	}
       }
+      g3ch.baseline /= 6.;
 
       g3xtal.chn.clear();
       g3xtal.chn.push_back(g3ch);
@@ -141,6 +155,7 @@ int main(int argc, char **argv) {
     for (int i=0; i<energies.size(); i++) { rawEnergy->Fill(energies[i]); }
     
     energies.clear();
+    data->ledOUT.clear();
     
     startTS += (curr - overlapWidth);
 

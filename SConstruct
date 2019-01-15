@@ -69,7 +69,6 @@ env.Append(BUILDERS = {'RootCint':bld})
 
 ## Optimization flags ##################################################
 env.Append(CCFLAGS = ['-O2', '-D_FILE_OFFSET_64', '-pg', '-g'], LINKFLAGS=['-pg'])
-#env.Append(CCFLAGS = ['-O2', '-D_FILE_OFFSET_64'])
 
 ## Finding dependencies (ROOT)
 try:
@@ -84,23 +83,24 @@ env.Append(LIBPATH='.')
 
 envStreamer = env.Clone()
 
-## Building GRETINADict and libGRETINA ####################################
-gretinaDictTarget = 'src/GRETINA3Dict.cpp'
-gretinaDictHeaders = ['src/GRETINA.h', 'src/LinkDefGRETINA.h']
+## Building GRETINADict and libGRETINA #################################
+gretinaDictTarget = 'src/GRETINADict.cpp'
+gretinaDictHeaders = ['src/GRETINA.h', 'src/GRETINAWavefunction.h', 'src/LinkDefGRETINA.h']
 env.RootCint(gretinaDictTarget, gretinaDictHeaders)
 
-gretinaLibTarget = 'GRETINA3'
-gretinaLibSources = ['src/GRETINA3Dict.cpp', 'src/GRETINA.cpp']
-env.SharedLibrary(target = gretinaLibTarget, source = gretinaLibSources,
-	          SHLIBPREFIX='lib')
+gretinaLibTarget = 'GRETINA'
+gretinaLibSources = ['src/GRETINADict.cpp', 'src/GRETINA.cpp', 
+                     'src/G3Waveform.cpp']                    
+env.SharedLibrary(target = gretinaLibTarget, source = gretinaLibSources, 
+                  SHLIBPREFIX='lib')
 
 ## Building StreamerDict and libStreamer ####################################
-streamerDictTarget = 'src/streamFunctionsDict.cpp'
+streamerDictTarget = 'src/streamerDict.cpp'
 streamerDictHeaders = ['src/streamFunctions.h', 'src/LinkDefStreamer.h']
 env.RootCint(streamerDictTarget, streamerDictHeaders)
 
 streamerLibTarget = 'Streamer'
-streamerLibSources = ['src/streamFunctionsDict.cpp', 'src/streamFunctions.cpp']
+streamerLibSources = ['src/streamerDict.cpp', 'src/streamFunctions.cpp']
 env.SharedLibrary(target = streamerLibTarget, source = streamerLibSources,
 	          SHLIBPREFIX='lib')
 
@@ -108,6 +108,6 @@ env.SharedLibrary(target = streamerLibTarget, source = streamerLibSources,
 
 streamerTarget = 'Analyze'
 streamerSources = ['src/readTrace.cpp']
-envStreamer.Append(LIBS=['GRETINA3', 'Streamer'])
+envStreamer.Append(LIBS=['GRETINA', 'Streamer'])
 envStreamer.Program(target = streamerTarget, source = streamerSources)
 

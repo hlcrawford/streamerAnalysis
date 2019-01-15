@@ -1,10 +1,7 @@
-/*! \file GRETINA.cpp
-    \brief Function code for all GRETINA and GRETINA-related classes.
-*/
-
 #include "GRETINA.h"
 
 ClassImp(globalHeader);
+ClassImp(mode3DataPacket);
 
 /**************************************************************/
 /* g3CrystalEvent Class Functions *****************************/
@@ -247,18 +244,6 @@ Float_t g3CrystalEvent::segSumRawThresh(Float_t thresh) {
 
 /**************************************************************/
 
-/*! Calculates a raw (NOT Dino corrected) segment sum for the given crystal, 
-    but with a timing requirement.  Segments are only included if their 
-    calcTime is within the input limits; no energy threshold is included.
-
-    \param minT The minimum time (in trace clock ticks) with which a 
-                segment will be included in the segment sum
-    \param maxT The maximum time (in trace clock ticks) with which a
-                segment will be included in the segment sum
-    \return Returns the float values of the raw segment sum for the crystal,
-            under the input timing conditions
-*/
-
 Float_t g3CrystalEvent::segSumRawTimed(Float_t minT, Float_t maxT) {
   Float_t segSum = 0;
   for (UInt_t ui=0; ui<chn.size(); ui++) {
@@ -273,20 +258,6 @@ Float_t g3CrystalEvent::segSumRawTimed(Float_t minT, Float_t maxT) {
 }
 
 /**************************************************************/
-
-/*! Calculates a raw (NOT Dino corrected) segment sum for the given crystal, 
-    with a timing requirement.  Segments are only included if their 
-    calcTime is within the input limits AND above a threshold value.
-
-    \param thresh The float energy threshold; any segments below
-                  this value are not included in the sum
-    \param minT The minimum time (in trace clock ticks) with which a 
-                segment will be included in the segment sum
-    \param maxT The maximum time (in trace clock ticks) with which a
-                segment will be included in the segment sum
-    \return Returns the float values of the raw segment sum for the crystal,
-            under both the input timing and threshold conditions
-*/
 
 Float_t g3CrystalEvent::segSumRawThreshTimed(Float_t thresh, Float_t minT, Float_t maxT) {
   Float_t segSum = 0;
@@ -324,30 +295,17 @@ Int_t g3CrystalEvent::segsHit(Float_t thresh) {
 
 /**************************************************************/
 
-/*! Calculates a segment sum value based on the waveform-derived segment
-  energy values.
-
-  \return Returns the float value of the segment sum energy for the crystal,
-  which in this case is the sum of segments with valid waveform calculated energies.
-*/
-
 Float_t g3CrystalEvent::segSumCalc() {
-  Float_t segSum = segSumCalcThresh(0.0);
+  Float_t segSum = 0.;
+  for (UInt_t ui=0; ui<chn.size(); ui++) {
+    if (chn[ui].segNum < 36) {
+      segSum += chn[ui].eCalc;
+    }
+  }
   return segSum;
 }
 
 /**************************************************************/
-
-/*! Calculates a segment sum value based on the waveform-derived segment
-  energy values, only including segments with calculated energies above
-  the input threshold value.
-
-  \param thresh The float energy threshold value -- segments are only 
-  included in the sum if the waveform calculated energy is above this threshold.
-  \return Returns the float value of the segment sum energy for the crystal,
-  which in this case is the sum of segments with valid waveform calculated energies,
-  which were above the input threshold.
-*/
 
 Float_t g3CrystalEvent::segSumCalcThresh(Float_t thresh) {
   Float_t segSum = 0.;
@@ -373,12 +331,6 @@ Int_t g3CrystalEvent::segsHitCalc(Float_t thresh) {
 
 /**************************************************************/
 
-/*! Determines the maximum segment energy in the event, returning that energy value.
-
-  \return Returns the energy (from the trapezoidal filter output) of
-  the segment with the maximum energy in the crystal.
-*/
-
 Float_t g3CrystalEvent::maxSegE() {
   Float_t maxE = 0.;  Int_t max = -1;
   for (UInt_t ui=0; ui<chn.size(); ui++) {
@@ -392,13 +344,6 @@ Float_t g3CrystalEvent::maxSegE() {
 
 /**************************************************************/
 
-/*! Determines the maximum segment energy in the event, based
-  on the energies calculated from the waveform analysis, returning that energy value.
-
-  \return Returns the energy (from the waveform energy filter analysis) of
-  the segment with the maximum energy in the crystal.
-*/
-
 Float_t g3CrystalEvent::maxSegECalc() {
   Float_t maxE = 0.;  Int_t max = -1;
   for (UInt_t ui=0; ui<chn.size(); ui++) {
@@ -411,13 +356,6 @@ Float_t g3CrystalEvent::maxSegECalc() {
 }
 
 /**************************************************************/
-
-/*! Determines the segment number of the segment with the maximum energy 
-  deposition, returning the segment number (from 0-35).  Based on FPGA calculated energies.
-
-  \return Returns the segment number (0-35) of the segment with the largest 
-  energy deposition in the crystal.  
-*/
 
 Int_t g3CrystalEvent::maxSegNum() {
   Float_t maxE = 0.;  Int_t max = -1;
@@ -434,14 +372,6 @@ Int_t g3CrystalEvent::maxSegNum() {
 
 /**************************************************************/
 
-/*! Determines the segment number of the segment with the second highest
-  energy deposition, returning the segment number (0-35).  Based on FPGA calculated
-  energies.
-
-  \return Returns the segment number (0-35) of the segment with the second largest
-  energy deposition in the crystal.
-*/
-
 Int_t g3CrystalEvent::secondSegNum() {
   Float_t maxE = 0.;  Int_t max = -1;
   
@@ -457,13 +387,6 @@ Int_t g3CrystalEvent::secondSegNum() {
 
 /**************************************************************/
 
-/*! Determines the segment number of the segment with the maximum energy 
-  deposition, returning the segment number (from 0-35).  Based on waveform calculated energies.
-
-  \return Returns the segment number (0-35) of the segment with the largest 
-  energy deposition in the crystal (based on waveform energy filter analysis).  
-*/
-
 Int_t g3CrystalEvent::maxSegNumCalc() {
   Float_t maxE = 0.;  UInt_t max = -1;
   for (UInt_t ui=0; ui<chn.size(); ui++) {
@@ -476,16 +399,6 @@ Int_t g3CrystalEvent::maxSegNumCalc() {
 }
 
 /**************************************************************/
-
-/*! Determines the deepest layer in the crystal that saw a net energy
-  deposition in the event.  Loops over all segments, and keeps track of
-  the layers hit; returns the deepest layer in which a segment was hit.
-
-  \param thresh The float value for the energy threshold above which segments
-  are considered to have been hit.
-  \return Returns the integer value from 1-6 of the deepest layer with a segment
-  fired above threshold.
-*/
 
 Int_t g3CrystalEvent::deepRingHit(Float_t thresh) {
   Int_t deep = -1;
@@ -514,13 +427,6 @@ Int_t g3CrystalEvent::deepRingHit(Float_t thresh) {
 
 /**************************************************************/
 
-/*! Searches for the smallest LED timestamp value of the channels in 
-  the crystal event.
-
-  \return Returns the long long int timestamp value corresponding to
-  the earliest TS recorded for a channel event in the crystal. 
-*/
-
 long long int g3CrystalEvent::LEDLow() {
   long long int ledLow = -1;
   for (UInt_t ui=0; ui<chn.size(); ui++) {
@@ -534,13 +440,6 @@ long long int g3CrystalEvent::LEDLow() {
 
 /**************************************************************/
 
-/*! Searches for the largest LED timestamp value of the channels in 
-  the crystal event.
-
-  \return Returns the long long int timestamp value corresponding to
-  the latest TS recorded for a channel event in the crystal. 
-*/
-
 long long int g3CrystalEvent::LEDHigh() {
   long long int ledHigh = 0;
   for (UInt_t ui=0; ui<chn.size(); ui++) {
@@ -552,14 +451,6 @@ long long int g3CrystalEvent::LEDHigh() {
 }
 
 /**************************************************************/
-
-/*! Function returns the number of channel events for the crystal in the 
-  current physics event.  'crystalBuild' refers to the fact that we expect
-  40 channel events for a properly 'built' crystal event.
-
-  \return Returns the unsigned integer value of the number of individual channel
-  events included in the crystal event.
-*/
 
 UInt_t g3CrystalEvent::crystalBuild() { return chn.size(); }
 
@@ -575,6 +466,89 @@ UInt_t g3CrystalEvent::crystalBuild() { return chn.size(); }
 
 long long int g3CrystalEvent::LEDRange() {
   return (LEDHigh() - LEDLow());
+}
+
+/**************************************************************/
+
+void g3CrystalEvent::mode3ToFile(FILE *outFile) {
+
+  mode3DataPacket *dp;
+  dp = (mode3DataPacket*)malloc(sizeof(dp->aahdr) + 
+				sizeof(dp->hdr) + 
+				sizeof(dp->waveform));
+  memset(dp->waveform, 1, MAX_TRACE_LENGTH * sizeof(UShort_t));
+
+  globalHeader *gHeader;
+  gHeader = (globalHeader*)malloc(sizeof(gHeader));
+
+  unsigned char outBuf[32*1024];
+  unsigned char *tmp = (outBuf);
+
+  dp->aahdr[0] = 0xAAAA;
+  dp->aahdr[1] = 0xAAAA;
+  
+  for (Int_t i=0; i<chn.size(); i++) {
+
+    gHeader->type = RAW;
+    gHeader->timestamp = chn[i].timestamp;
+    Int_t evtLength = (sizeof(dp->aahdr) + sizeof(dp->hdr) + chn[i].tracelength()*sizeof(UShort_t));
+    gHeader->length = evtLength;
+
+    dp->hdr[0] = chn[i].hdr0;
+    dp->hdr[1] = chn[i].hdr1;
+    dp->hdr[2] = ((chn[i].timestamp & 0xffff0000) >> 16);
+    dp->hdr[3] = ((chn[i].timestamp & 0xffff));
+    dp->hdr[5] = ((chn[i].timestamp & 0xffff00000000) >> 32);
+    dp->hdr[6] = ((chn[i].CFDtimestamp & 0xffff));
+    dp->hdr[8] = ((chn[i].CFDtimestamp & 0xffff00000000) >> 32);
+    dp->hdr[9] = ((chn[i].CFDtimestamp & 0xffff0000) >> 16);
+
+    Bool_t sign = 0;
+    Int_t tmpIntEnergy = (Int_t)(32*chn[i].eRaw);
+    UInt_t tmpEnergy = 0;
+    if (chn[i].chanID()%10 == 9) { /* CC */
+      if (chn[i].eRaw < 0) {
+	tmpEnergy = (tmpIntEnergy + (UInt_t)(0x01000000));
+	sign = 1;
+      } else {
+	tmpEnergy = (UInt_t)(tmpIntEnergy);
+      }
+    } else {
+      if (chn[i].eRaw < 0) {
+	tmpEnergy = (UInt_t)(-tmpIntEnergy);
+      } else {
+	tmpEnergy = (UInt_t)((0x01000000)-tmpIntEnergy);
+	sign = 1;
+      }
+    }
+    dp->hdr[4] = (tmpEnergy & 0xffff);
+    dp->hdr[7] = ((tmpEnergy & 0x00ff0000) >> 16);
+    if (sign) { dp->hdr[7] = (dp->hdr[7] & 0x0100); }
+    dp->hdr[7] += (chn[i].pileUp() << 15);
+
+    for (Int_t j=0; j<chn[i].tracelength()+1; j=j+2) {
+      if (chn[i].wf.raw[j] < 0) {
+    	dp->waveform[j+1] = (UShort_t)(chn[i].wf.raw[j] + std::numeric_limits<unsigned int>::max());
+      } else {
+    	dp->waveform[j+1] = (UShort_t)(chn[i].wf.raw[j]);
+      }
+      if (chn[i].wf.raw[j+1] < 0) {
+    	dp->waveform[j] = (UShort_t)(chn[i].wf.raw[j+1] + std::numeric_limits<unsigned int>::max());
+      } else {
+    	dp->waveform[j] = (UShort_t)(chn[i].wf.raw[j+1]);
+      }
+    }
+
+    memmove(tmp, &dp->aahdr[0], evtLength);
+    for (Int_t j=0; j<evtLength; j=j+2) {
+      swap(*(outBuf + j), *(outBuf + j + 1));
+    }
+    
+    fwrite(gHeader, sizeof(struct globalHeader), 1, outFile);
+    fwrite(tmp, evtLength, 1, outFile);
+    
+  }
+
 }
 
 /**************************************************************/
@@ -608,12 +582,6 @@ UInt_t g3OUT::crystalMult() { return xtals.size(); }
 
 /**************************************************************/
 
-/*! Calculates a sum energy for the array (calorimetric) energy, based
-    on the central contact (CC1) energies reported by each crystal.
-
-    \return Returns the sum of CC1 energies as the calorimeterE.
-*/
-
 Float_t g3OUT::calorimeterE() {
   Float_t sum = 0.;
   for (UInt_t ui=0; ui<crystalMult(); ui++) {
@@ -621,4 +589,3 @@ Float_t g3OUT::calorimeterE() {
   }
   return sum;
 }
-

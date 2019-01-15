@@ -1,6 +1,6 @@
 #include "streamFunctions.h"
 
-int streamFunctions::Initialize(TString inputFileName) {
+int streamer::Initialize(TString inputFileName) {
   wf = (short int*)calloc(READSIZE, sizeof(short int));
   ledBuf = (int*)calloc(READSIZE, sizeof(int));
   trapBuf = (int*)calloc(READSIZE, sizeof(int));
@@ -21,13 +21,17 @@ int streamFunctions::Initialize(TString inputFileName) {
   
   bytesRead = 0;
 
-  int num = fread(wf, sizeof(short int), READSIZE, fin);
-  bytesRead += sizeof(short int)*num;
+  int num = 0;
+  for (int i=0; i<5; i++) { /* Skip beginning of the file... */
+    num = fread(wf, sizeof(short int), READSIZE, fin);
+    if (1) { for (int j=0; j<READSIZE; j++) { wf[j] = -wf[j]; } }
+    bytesRead += sizeof(short int)*num;
+  }
 
   return num;
 }
 
-int streamFunctions::Reset(int overlap) {
+int streamer::Reset(int overlap) {
   for (int i=0; i<overlap; i++) {
     wf[i] = wf[READSIZE-overlap+i];
     ledBuf[i] = ledBuf[READSIZE-overlap+i];
@@ -55,6 +59,7 @@ int streamFunctions::Reset(int overlap) {
   ledOUT.clear();
   
   int num = fread(wf+overlap, sizeof(short int), READSIZE-overlap, fin);
+  if (1) { for (int j=overlap; j<READSIZE; j++) { wf[j] = -wf[j]; } }
   bytesRead += sizeof(short int)*num;
 
   return num;
@@ -63,7 +68,7 @@ int streamFunctions::Reset(int overlap) {
 
 /**************************************************************/
 
-int streamFunctions::calculateLEDlevel(int index, int thresh) {
+int streamer::calculateLEDlevel(int index, int thresh) {
   short int d1, d2, d3, d4, d5, dd, dd1, dd2, dd3;
   index-=2;
   d1 = wf[index-2] - wf[index-LEDK-2];
@@ -75,24 +80,31 @@ int streamFunctions::calculateLEDlevel(int index, int thresh) {
   dd2 = (d2 + 2*d3 + d4)/4;
   dd3 = (d3 + 2*d4 + d5)/4;
   dd = -(dd1 + 2*dd2 + dd3)/4;
-  if (thresh > 0) { 
+
+  if (thresh > 0) {
     if (dd > thresh) { return 100; } else { return 0; }
   } else {
     if (dd < thresh) { return 100; } else { return 0; }
   }
 
-  return 100;
+  return 0;
+  //  return dd;
 }
 
 /**************************************************************/
 
-int streamFunctions::doLEDfilter(int startIndex, int endIndex, int startTS) {
+int streamer::doLEDfilter(int startIndex, int endIndex, int startTS) {
+
+  int now = 0; int previous = 0;
 
   for (int i=startIndex; i<endIndex; i++) {
     /* LED-like filter */
     if ((i + startTS) > 10) {
       ledBuf[i] = calculateLEDlevel(i, LEDThreshold);
+
       /* Look for LED crossing -- i.e. trigger */
+      //      if ((LEDThreshold > 0 && (ledBuf[i] > LEDThreshold) && (ledBuf[i-1] < LEDThreshold)) ||
+      //	  (LEDThreshold < 0 && (ledBuf[i] < LEDThreshold) && (ledBuf[i-1] < LEDThreshold))) {
       if (ledBuf[i] == 100 && ledBuf[i-1] == 0) {
 	ledOUT.push_back(i+startTS);
       }
@@ -104,7 +116,7 @@ int streamFunctions::doLEDfilter(int startIndex, int endIndex, int startTS) {
 
 /**************************************************************/
 
-double streamFunctions::baseline(int index) {
+double streamer::baseline(int index) {
   int sum = 0;
   for (int i=0; i<10; i++) {
     sum += wf[index-i];
@@ -114,7 +126,7 @@ double streamFunctions::baseline(int index) {
 
 /**************************************************************/
 
-void streamFunctions::doVHDLtrapezoid(int startIndex, int endIndex) {
+void streamer::doVHDLtrapezoid(int startIndex, int endIndex) {
 
   for (int i=startIndex; i<endIndex; i++) {
     if (i == 0) { trapBuf[i] = 0; }
@@ -123,27 +135,27 @@ void streamFunctions::doVHDLtrapezoid(int startIndex, int endIndex) {
       int scratch =  ( (wf[i]) - (wf[i-EM]) - (wf[i-EM-EK]) + (wf[i-2*EM-EK]) );
       trapBuf[i] = trapBuf[i-1] + scratch;
     }
-
-
   }
   
 }
 
 /**************************************************************/
 
-double streamFunctions::doVHDLpolezero(int startIndex, int endIndex, double sum, double tau) {
+double streamer::doVHDLpolezero(int startIndex, int endIndex, double sum, double tau) {
 
   for (int i=startIndex; i<endIndex; i++) {
     if (i < (2*EM+EK)) { pzBuf[i] = 0.; }
-    else if (i == (2*EM+EK)) { trapBuf[i] = (tau+1)*trapBuf[i-1]; }
+    else if (i == (2*EM+EK)) { pzBuf[i] = (tau+1)*trapBuf[i-1]; }
     else if (i > (2*EM+EK)) {
       if (sum>0) {
-	sum += (double)trapBuf[i] - (0.00015);
+	sum += (double)trapBuf[i] - 0.15;
+	pzBuf[i] = trapBuf[i-1] + sum*(1/tau);
       } else {
-	sum += (double)trapBuf[i] + (0.00015);
-	pzBuf[i] = trapBuf[i-1] + sum*(1/tau) + 7.e-6;
+	sum += (double)trapBuf[i] + 0.15;
+	pzBuf[i] = trapBuf[i-1] + sum*(1/tau);
       }
     }
+    //printf("%d %d %f %f\n", i, trapBuf[i], sum, pzBuf[i]);
   }
 
   return sum;
@@ -152,10 +164,10 @@ double streamFunctions::doVHDLpolezero(int startIndex, int endIndex, double sum,
 
 /**************************************************************/
 
-void streamFunctions::doBaselineRestorationCC(int startIndex, int endIndex, int startTS, int DV) {
+void streamer::doBaselineRestorationCC(int startIndex, int endIndex, int startTS, int DV) {
 
   int j=0;
-  long long int ledTS = 0;
+  long int ledTS = 0;
   int BLRinhibit = 0;
     
   for (int i=startIndex; i<endIndex; i++) {
@@ -190,10 +202,10 @@ void streamFunctions::doBaselineRestorationCC(int startIndex, int endIndex, int 
 
 /**************************************************************/
 
-void streamFunctions::doBaselineRestorationM2(int startIndex, int endIndex, int startTS, int DV) {
+void streamer::doBaselineRestorationM2(int startIndex, int endIndex, int startTS, int DV) {
 
   int j=0;
-  long long int ledTS = 0;
+  long int ledTS = 0;
   int BLRinhibit = 0;
 
   double div = pow(2., DV);
@@ -228,28 +240,28 @@ void streamFunctions::doBaselineRestorationM2(int startIndex, int endIndex, int 
 
 /**************************************************************/
 
-std::vector<double> streamFunctions::doEnergyPeakFind(double *in, int startIndex, int endIndex, int startTS, int *pileUp) {
+std::vector<double> streamer::doEnergyPeakFind(double *in, int startIndex, int endIndex, int startTS, int *pileUp) {
 
   std::vector<double> energies;
 
   if (ledOUT.size() > 0) {
     int j=0, ledCrossed = 0, piledUp = 0;
     double peak = 0;
-    long long int ledTS = 0;
+    long int ledTS = 0;
     
     for (int i=startIndex; i<endIndex; i++) {
       if (i == (ledOUT[j]-startTS)) {
 	if (ledCrossed) { (*pileUp)++; piledUp = 1; }
 	ledTS = (ledOUT[j]-startTS);  ledCrossed = 1;  j++;
       }
-      if (ledCrossed && in[i] < peak && (i-ledTS) < (EM+EK)) { peak = in[i]; }
+      if (ledCrossed && in[i] > peak && (i-ledTS) < (EM+EK)) { peak = in[i]; }
       if (ledCrossed && (i-ledTS) >= EM+EK) {
 	if (!piledUp) {
-	  energies.push_back(-(peak - in[ledTS-10])/32.);
+	  energies.push_back((peak - in[ledTS-10])/32.);
 	}
 	ledCrossed = 0;  piledUp = 0;
-	if (in[i] < 0) { peak = 0; }
-	else if (in[i] > 0) { peak = std::numeric_limits<double>::max(); }
+	if (in[i] > 0) { peak = 0; }
+	else if (in[i] < 0) { peak = std::numeric_limits<double>::max(); }
       }
     }
   }

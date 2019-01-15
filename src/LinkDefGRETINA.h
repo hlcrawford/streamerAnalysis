@@ -6,6 +6,7 @@
 
 #pragma link C++ struct globalHeader+;
 
+#pragma link C++ struct mode3DataPacket+;
 #pragma link C++ class g3ChannelEvent+;
 #pragma link C++ class g3Waveform+;
 #pragma link C++ class g3CrystalEvent+;
