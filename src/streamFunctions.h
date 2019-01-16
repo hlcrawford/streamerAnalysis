@@ -46,10 +46,11 @@ class streamer : public TObject {
   int calculateLEDlevel(int index, int thresh);
   int doLEDfilter(int startIndex, int endIndex, int startTS);
   double baseline(int index);
-  void doVHDLtrapezoid(int startIndex, int endIndex);
-  double doVHDLpolezero(int startIndex, int endIndex, double sum, double tau);
+  void doTrapezoid(int startIndex, int endIndex);
+  double doPolezeroBasic(int startIndex, int endIndex, double sum, double tau);
   void doBaselineRestorationCC(int startIndex, int endIndex, int startTS, int DV);
   void doBaselineRestorationM2(int startIndex, int endIndex, int startTS, int DV);
+  void doBaselineRestorationSZ();
   std::vector<double> doEnergyPeakFind(double *in, int startIndex, int endIndex, int startTS, int *pileUp);
   std::vector<double> doEnergyFixedPickOff(double *in, int pickOff, int startIndex, int endIndex, int startTS, int *pileUp);
 

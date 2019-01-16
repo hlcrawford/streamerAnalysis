@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
   long long int currTS = 0;
 
   int inhibitBLR = 0;
-  int withBLR = 0;
+  int withBLR = 1;
   long long int BLRi = 1;
 
   int invert = 0;
@@ -111,12 +111,12 @@ int main(int argc, char **argv) {
 
     printf("numberOfReads = %d, ledCrossing = %d\r", numberOfReads, ledCrossing);
     
-    data->doVHDLtrapezoid(indexStart, curr);
+    data->doTrapezoid(indexStart, curr);
     
-    pzSum = data->doVHDLpolezero(indexStart, curr, pzSum, tau);
+    pzSum = data->doPolezeroBasic(indexStart, curr, pzSum, tau);
     
     //data->doBaselineRestorationCC(indexStart, curr, startTS, DV);
-    //data->doBaselineRestorationM2(indexStart, curr, startTS, DV);
+    data->doBaselineRestorationM2(indexStart, curr, startTS, DV);
 
     if(withBLR) {
       energies = data->doEnergyPeakFind(data->pzBLBuf, indexStart, curr, startTS, &pileUp);
@@ -131,8 +131,14 @@ int main(int argc, char **argv) {
       g3ch.timestamp = data->ledOUT[i];
       if (i < energies.size()) {
 	g3ch.eRaw = energies[i];
-      } else { g3ch.eRaw = -1000; }
+	if (energies[i+1] == 1) { g3ch.hdr7 = 0x8000; } else { g3ch.hdr7 = 0; } /* Pile up flag... */
+      }
       
+      g3ch.prevE1 = energies[i-2];
+      g3ch.prevE2 = energies[i-4];
+      g3ch.deltaT1 = data->ledOUT[i]-data->ledOUT[i-1];
+      g3ch.deltaT2 = data->ledOUT[i-1]-data->ledOUT[i-2];
+
       /* Pull out the WF */
       g3ch.wf.raw.clear();
       for (int j=-200; j<300; j++) {

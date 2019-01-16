@@ -49,7 +49,6 @@ int main(int argc, char **argv) {
     sscanf(argv[5], "%d", &invert);
   }
     
-    
   streamer *data = new streamer(invert);
   data->setLEDThresh(ledThresh);
   curr = data->Initialize(inputName);
@@ -60,9 +59,8 @@ int main(int argc, char **argv) {
   TH2F *tauValues = new TH2F("tau", "tau", 3000, 0, 30000, 3000, 0, 3000);
 
   TF1 *expofit = new TF1("expofit", "expo(0)");
-  expofit->SetParameters(100, -0.0015);
+  expofit->SetParameters(100, -0.00015);
 	
-
   startTS = 0;
   double pzSum = 0;
   int indexStart = 0;
@@ -97,12 +95,15 @@ int main(int argc, char **argv) {
       if ( (data->ledOUT[i+1] - data->ledOUT[i]) > 1500) {
 	for (int j=0; j<800; j++) { yVal[j] = data->wf[data->ledOUT[i] - startTS + 200 + j] - data->wf[data->ledOUT[i] - startTS - 10]; }
 	gr = new TGraph(800, xVal, yVal);
-	expofit->SetParameters(100, -0.0015);
 	gr->Fit("expofit", "Q");
+	if (expofit->GetChisquare()/expofit->GetNDF() > 300) {
+	  expofit->SetParameters(100, -0.00015);
+	  gr->Fit("expofit", "Q");
+	}
 	gr->SetName(Form("gr%d", i));
 	gr->Write();
 	tauValues->Fill(-1./expofit->GetParameter(1), expofit->GetChisquare()/expofit->GetNDF());
-	//printf("%f %f\n", 1./expofit->GetParameter(1), expofit->GetChisquare()/expofit->GetNDF());
+	//printf("%d %f %f\n", i, 1./expofit->GetParameter(1), expofit->GetChisquare()/expofit->GetNDF());
       }
     }
 
