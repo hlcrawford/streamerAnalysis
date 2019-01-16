@@ -35,9 +35,11 @@ class streamer : public TObject {
   double tau;
   int DV;
   int LEDThreshold;
+
+  int invertWF;
   
  public:
-  streamer() {;}
+  streamer(int invert) { invertWF = invert; }
   ~streamer() {;}
   int Initialize(TString inputFileName);
   int Reset(int overlap);
@@ -49,6 +51,7 @@ class streamer : public TObject {
   void doBaselineRestorationCC(int startIndex, int endIndex, int startTS, int DV);
   void doBaselineRestorationM2(int startIndex, int endIndex, int startTS, int DV);
   std::vector<double> doEnergyPeakFind(double *in, int startIndex, int endIndex, int startTS, int *pileUp);
+  std::vector<double> doEnergyFixedPickOff(double *in, int pickOff, int startIndex, int endIndex, int startTS, int *pileUp);
 
   void setTau(double itau) { tau = itau; }
   void setDV(double iDV) { DV = iDV; }

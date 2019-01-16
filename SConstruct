@@ -104,6 +104,13 @@ streamerLibSources = ['src/streamerDict.cpp', 'src/streamFunctions.cpp']
 env.SharedLibrary(target = streamerLibTarget, source = streamerLibSources,
 	          SHLIBPREFIX='lib')
 
+## Building Tau-getter executable ###########################################
+
+tauTarget = 'getTau'
+tauSources = ['src/findTau.cpp']
+envStreamer.Append(LIBS=['Streamer'])
+envStreamer.Program(target = tauTarget, source = tauSources)
+
 ## Building Streamer executable ###########################################
 
 streamerTarget = 'Analyze'

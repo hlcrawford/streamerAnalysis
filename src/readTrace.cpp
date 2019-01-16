@@ -11,7 +11,6 @@
 #include "streamFunctions.h"
 #include "GRETINA.h"
 
-
 #define OUTPUTFILE "tr.out"
 
 int main(int argc, char **argv) {
@@ -39,14 +38,14 @@ int main(int argc, char **argv) {
   int withBLR = 0;
   long long int BLRi = 1;
 
-  int invert = 1;
+  int invert = 0;
 
   std::vector<double> energies;
   
   double peak = 0;
   
   if (argc < 4) {
-    fprintf(stderr, "Minimum usage: readTrace <filename> <tau> <BLR constant>\n");
+    fprintf(stderr, "Minimum usage: readTrace <input filename> <tau> <BLR constant> <nReads> <rootOutputName> <ledThreshold> <invert? = 0>\n");
     exit(1);
   }
 
@@ -68,8 +67,11 @@ int main(int argc, char **argv) {
     sscanf(argv[6], "%d", &ledThresh); 
     printf("LED threshold = %d\n", ledThresh);
   }
+  if (argc >= 8) {
+    sscanf(argv[7], "%d", &invert);
+  }
   
-  streamer *data = new streamer();
+  streamer *data = new streamer(invert);
   curr = data->Initialize(inputName);
   data->setTau(tau);
   data->setDV(DV);
@@ -120,6 +122,7 @@ int main(int argc, char **argv) {
       energies = data->doEnergyPeakFind(data->pzBLBuf, indexStart, curr, startTS, &pileUp);
     } else {
       energies = data->doEnergyPeakFind(data->pzBuf, indexStart, curr, startTS, &pileUp);
+      //energies = data->doEnergyFixedPickOff(data->pzBuf, 470, indexStart, curr, startTS, &pileUp);
     }
 
     /* Write out the events in this chunk of data... */

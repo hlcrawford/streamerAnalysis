@@ -13,7 +13,8 @@ int streamer::Initialize(TString inputFileName) {
   
   BL1[0] = 0;  BL2[0] = 0; subBL1[0] = 0; subBL2[0] = 0;
 
-  fin = fopen(inputFileName.Data(), "r");
+  inputFileName = "zcat " + inputFileName;
+  fin = popen(inputFileName.Data(), "r");
   if (fin == 0) {
     fprintf(stderr, "Cannot open the input file %s\n", inputFileName.Data());
     exit(1);
@@ -24,7 +25,7 @@ int streamer::Initialize(TString inputFileName) {
   int num = 0;
   for (int i=0; i<5; i++) { /* Skip beginning of the file... */
     num = fread(wf, sizeof(short int), READSIZE, fin);
-    if (1) { for (int j=0; j<READSIZE; j++) { wf[j] = -wf[j]; } }
+    if (invertWF) { for (int j=0; j<READSIZE; j++) { wf[j] = -wf[j]; } }
     bytesRead += sizeof(short int)*num;
   }
 
@@ -59,7 +60,7 @@ int streamer::Reset(int overlap) {
   ledOUT.clear();
   
   int num = fread(wf+overlap, sizeof(short int), READSIZE-overlap, fin);
-  if (1) { for (int j=overlap; j<READSIZE; j++) { wf[j] = -wf[j]; } }
+  if (invertWF) { for (int j=overlap; j<READSIZE; j++) { wf[j] = -wf[j]; } }
   bytesRead += sizeof(short int)*num;
 
   return num;
@@ -80,15 +81,7 @@ int streamer::calculateLEDlevel(int index, int thresh) {
   dd2 = (d2 + 2*d3 + d4)/4;
   dd3 = (d3 + 2*d4 + d5)/4;
   dd = -(dd1 + 2*dd2 + dd3)/4;
-
-  if (thresh > 0) {
-    if (dd > thresh) { return 100; } else { return 0; }
-  } else {
-    if (dd < thresh) { return 100; } else { return 0; }
-  }
-
-  return 0;
-  //  return dd;
+  return dd;
 }
 
 /**************************************************************/
@@ -101,12 +94,10 @@ int streamer::doLEDfilter(int startIndex, int endIndex, int startTS) {
     /* LED-like filter */
     if ((i + startTS) > 10) {
       ledBuf[i] = calculateLEDlevel(i, LEDThreshold);
-
       /* Look for LED crossing -- i.e. trigger */
-      //      if ((LEDThreshold > 0 && (ledBuf[i] > LEDThreshold) && (ledBuf[i-1] < LEDThreshold)) ||
-      //	  (LEDThreshold < 0 && (ledBuf[i] < LEDThreshold) && (ledBuf[i-1] < LEDThreshold))) {
-      if (ledBuf[i] == 100 && ledBuf[i-1] == 0) {
-	ledOUT.push_back(i+startTS);
+      if ((LEDThreshold > 0 && (ledBuf[i] >= LEDThreshold) && (ledBuf[i-1] < LEDThreshold)) ||
+	  (LEDThreshold < 0 && (ledBuf[i] <= LEDThreshold) && (ledBuf[i-1] > LEDThreshold))) {
+     	ledOUT.push_back(i+startTS);
       }
     }
   }
@@ -258,6 +249,7 @@ std::vector<double> streamer::doEnergyPeakFind(double *in, int startIndex, int e
       if (ledCrossed && (i-ledTS) >= EM+EK) {
 	if (!piledUp) {
 	  energies.push_back((peak - in[ledTS-10])/32.);
+	  //energies.push_back((peak)/32.);
 	}
 	ledCrossed = 0;  piledUp = 0;
 	if (in[i] > 0) { peak = 0; }
@@ -267,4 +259,31 @@ std::vector<double> streamer::doEnergyPeakFind(double *in, int startIndex, int e
   }
   
   return energies;
+}
+
+std::vector<double> streamer::doEnergyFixedPickOff(double *in, int pickOff, int startIndex, int endIndex, int startTS, int *pileUp) {
+
+  std::vector<double> energies;
+  if (ledOUT.size() > 0) {
+    int j=0;
+    int piledUp = 0;
+
+    for (int i=startIndex; i<endIndex; i++) {
+      if (i == (ledOUT[j]-startTS) && j < ledOUT.size()-1) {
+	/* Check for pileup condition... */	
+	if ( ((ledOUT[j]-ledOUT[j-1])< EM+EK) ||
+	     ((ledOUT[j+1]-ledOUT[j])< EM+EK) ) {
+	  (*pileUp)++; piledUp = 1;
+	} else { piledUp = 0; }
+	if (!piledUp) {
+	  // energies.push_back(in[ledOUT[j]-startTS + pickOff])
+	  energies.push_back((in[ledOUT[j]-startTS + pickOff] - in[ledOUT[j]-startTS-10])/32.);
+	}
+	j++;
+      }
+    }
+  }
+
+  return energies;
+
 }
