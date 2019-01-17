@@ -19,10 +19,10 @@ int main(int argc, char **argv) {
   int num, curr, i, newRead;
 
   int nReads = 10000;
-  int overlapWidth = 2*EM + EK + 100;
+  int overlapWidth = 2*(2*EM + EK);
 
-  double tau = 5500; /* From Mario S. code */
-  int DV = 6;
+  double tau = 5000; /* 50us nominal = 5000 clock ticks */
+  int DV = 8;
   int ledThresh = 50;
   
   unsigned long long int ledCrossings;
@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
   long long int currTS = 0;
 
   int inhibitBLR = 0;
-  int withBLR = 1;
+  int withBLR = 0;
   long long int BLRi = 1;
 
   int invert = 0;
@@ -73,6 +73,7 @@ int main(int argc, char **argv) {
   
   streamer *data = new streamer(invert);
   curr = data->Initialize(inputName);
+  curr -= overlapWidth/2;
   data->setTau(tau);
   data->setDV(DV);
   data->setLEDThresh(ledThresh);
@@ -103,62 +104,72 @@ int main(int argc, char **argv) {
   for (int numberOfReads = 1; numberOfReads<=nReads; numberOfReads++) {
 
     if (numberOfReads == 1) { indexStart = 0; }
-    else { indexStart = overlapWidth; }
+    else { indexStart = overlapWidth/2; }
 
-    /* Actual analysis is from these functions for a given chunk of waveform */
-    ledCrossings = data->doLEDfilter(indexStart, curr, startTS);
+    /* First basic filtering ... 
+          for first read, we go from [0] to [END - 1/2 of overlap]
+	  for subsequent reads, we go from [1/2 of overlap] to [END - 1/2 of overlap] */
+    data->doTrapezoid(indexStart, curr, numberOfReads);    
+    pzSum = data->doPolezeroBasic(indexStart, curr, pzSum, tau, numberOfReads);
+
+    data->doLEDfilter(indexStart, curr, startTS);
+    ledCrossings = data->getLEDcrossings(indexStart, curr, startTS);
     ledCrossing += ledCrossings;
-
+    
     printf("numberOfReads = %d, ledCrossing = %d\r", numberOfReads, ledCrossing);
     
-    data->doTrapezoid(indexStart, curr);
-    
-    pzSum = data->doPolezeroBasic(indexStart, curr, pzSum, tau);
-    
-    //data->doBaselineRestorationCC(indexStart, curr, startTS, DV);
-    data->doBaselineRestorationM2(indexStart, curr, startTS, DV);
+    /* Making this work over boundaries is going to take some thinking... */
+
+    //data->doBaselineRestorationCC(indexStart, curr, startTS, DV, numberOfReads);
+    //data->doBaselineRestorationM2(indexStart, curr, startTS, DV, numberOfReads);
 
     if(withBLR) {
-      energies = data->doEnergyPeakFind(data->pzBLBuf, indexStart, curr, startTS, &pileUp);
+      energies = data->doEnergyPeakFind(data->pzBLBuf, 0, curr-overlapWidth, startTS, &pileUp);
     } else {
       energies = data->doEnergyPeakFind(data->pzBuf, indexStart, curr, startTS, &pileUp);
-      //energies = data->doEnergyFixedPickOff(data->pzBuf, 470, indexStart, curr, startTS, &pileUp);
+      //energies = data->doEnergyFixedPickOff(data->pzBuf, 470, indexStart-overlapWidth/2, curr, startTS, &pileUp);
     }
 
     /* Write out the events in this chunk of data... */
     for (int i=0; i<data->ledOUT.size(); i++) {
-      g3ch.Clear();
-      g3ch.timestamp = data->ledOUT[i];
-      if (i < energies.size()) {
-	g3ch.eRaw = energies[i];
-	if (energies[i+1] == 1) { g3ch.hdr7 = 0x8000; } else { g3ch.hdr7 = 0; } /* Pile up flag... */
-      }
-      
-      g3ch.prevE1 = energies[i-2];
-      g3ch.prevE2 = energies[i-4];
-      g3ch.deltaT1 = data->ledOUT[i]-data->ledOUT[i-1];
-      g3ch.deltaT2 = data->ledOUT[i-1]-data->ledOUT[i-2];
-
-      /* Pull out the WF */
-      g3ch.wf.raw.clear();
-      for (int j=-200; j<300; j++) {
-	g3ch.wf.raw.push_back(data->wf[data->ledOUT[i]-startTS+j]);
-	if (j >= -10 && j<=-4) {
-	  g3ch.baseline += (data->wf[data->ledOUT[i] - startTS+j]);
+      // if (data->ledOUT[i] <= startTS + curr - overlapWidth) {
+	g3ch.Clear();
+	g3ch.timestamp = data->ledOUT[i];
+	if (i < energies.size()) {
+	  g3ch.eRaw = energies[i];
+	  if (energies[i+1] == 1) { g3ch.hdr7 = 0x8000; } else { g3ch.hdr7 = 0; } /* Pile up flag... */
 	}
-      }
-      g3ch.baseline /= 6.;
+	
+	g3ch.prevE1 = energies[i-2];
+	g3ch.prevE2 = energies[i-4];
+	g3ch.deltaT1 = data->ledOUT[i]-data->ledOUT[i-1];
+	g3ch.deltaT2 = data->ledOUT[i-1]-data->ledOUT[i-2];
+	
+	g3ch.hdr0 = numberOfReads;
+	g3ch.hdr1 = data->ledOUT[i] - startTS;
 
-      g3xtal.chn.clear();
-      g3xtal.chn.push_back(g3ch);
-      g3xtal.crystalNum = 1;
-      g3xtal.quadNum = 1;
-      g3xtal.module = 1;
-      g3xtal.traceLength = g3ch.wf.raw.size();
-
-      g3->Reset();
-      g3->xtals.push_back(g3xtal);
-      teb->Fill();
+	/* Pull out the WF */
+	g3ch.wf.raw.clear();
+	for (int j=-200; j<300; j++) {
+	  g3ch.wf.raw.push_back(data->wf[data->ledOUT[i]-startTS+j]);
+	  if (j >= -10 && j<=-4) {
+	    g3ch.baseline += (data->wf[data->ledOUT[i] - startTS+j]);
+	  }
+	}
+	g3ch.baseline /= 6.;
+	
+	g3xtal.chn.clear();
+	g3xtal.chn.push_back(g3ch);
+	g3xtal.crystalNum = 1;
+	g3xtal.quadNum = 1;
+	g3xtal.module = 1;
+	g3xtal.traceLength = g3ch.wf.raw.size();
+	
+	g3->Reset();
+	g3->xtals.push_back(g3xtal);
+	teb->Fill();
+	//}
+	//data->ledOUT.erase(data->ledOUT.begin(), data->ledOUT.begin()+1);
     }
 
     for (int i=0; i<energies.size(); i++) { rawEnergy->Fill(energies[i]); }

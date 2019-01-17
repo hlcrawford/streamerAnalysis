@@ -84,24 +84,27 @@ int streamer::calculateLEDlevel(int index, int thresh) {
 
 /**************************************************************/
 
-int streamer::doLEDfilter(int startIndex, int endIndex, int startTS) {
-
-  int now = 0; int previous = 0;
+void streamer::doLEDfilter(int startIndex, int endIndex, int startTS) {
 
   for (int i=startIndex; i<endIndex; i++) {
     /* LED-like filter */
-    if ((i + startTS) > 10) {
+    if ( (i+startTS) > 10 ) {
       ledBuf[i] = calculateLEDlevel(i, LEDThreshold);
-      /* Look for LED crossing -- i.e. trigger */
-      if ((LEDThreshold > 0 && (ledBuf[i] >= LEDThreshold) && (ledBuf[i-1] < LEDThreshold)) ||
-	  (LEDThreshold < 0 && (ledBuf[i] <= LEDThreshold) && (ledBuf[i-1] > LEDThreshold))) {
-     	ledOUT.push_back(i+startTS);
-      }
+    } else { ledBuf[i] = 0; }
+  }
+}
+
+/**************************************************************/
+
+int streamer::getLEDcrossings(int startIndex, int endIndex, int startTS) {
+  for (int i=startIndex; i<endIndex; i++) {
+    if ((ledBuf[i] >= LEDThreshold) && (ledBuf[i-1] < LEDThreshold)) {
+      ledOUT.push_back(i+startTS);
     }
   }
   return ledOUT.size();
-  
 }
+
 
 /**************************************************************/
 
@@ -115,14 +118,15 @@ double streamer::baseline(int index) {
 
 /**************************************************************/
 
-void streamer::doTrapezoid(int startIndex, int endIndex) {
+void streamer::doTrapezoid(int startIndex, int endIndex, int first) {
 
   /* Trapezoid filter straight out of Jordanov and Knoll, NIM A 345, 337 (1994). */
+  /* Initialize for now assuming no pulse at the start of the data... */
 
   for (int i=startIndex; i<endIndex; i++) {
-    if (i == 0) { trapBuf[i] = 0; }
-    else if (i <= (2*EM+EK)) { trapBuf[i] = wf[i] - trapBuf[i-1]; }
-    else if (i > (2*EM+EK)) {
+    if (i == 0 && first == 1) { trapBuf[i] = 0; }
+    else if (i <= (2*EM+EK) && first == 1) { trapBuf[i] = 0; }
+    else if ( (i > (2*EM+EK) && first == 1) || first != 1) {
       int scratch =  ( (wf[i]) - (wf[i-EM]) - (wf[i-EM-EK]) + (wf[i-2*EM-EK]) );
       trapBuf[i] = trapBuf[i-1] + scratch;
     }
@@ -132,12 +136,14 @@ void streamer::doTrapezoid(int startIndex, int endIndex) {
 
 /**************************************************************/
 
-double streamer::doPolezeroBasic(int startIndex, int endIndex, double sum, double tau) {
+double streamer::doPolezeroBasic(int startIndex, int endIndex, double sum, double tau, int first) {
+
+  /* Initialization is a problem here... */
 
   for (int i=startIndex; i<endIndex; i++) {
-    if (i < (2*EM+EK)) { pzBuf[i] = 0.; }
-    else if (i == (2*EM+EK)) { pzBuf[i] = (tau+1)*trapBuf[i-1]; }
-    else if (i > (2*EM+EK)) {
+    if (i < (2*EM+EK) && first == 1) { pzBuf[i] = 0.; }
+    else if (i == (2*EM+EK) && first == 1) { pzBuf[i] = trapBuf[i-1]; }
+    else if ((i > (2*EM+EK) && first == 1) || (first != 1)) {
       if (sum>0) {
 	sum += (double)trapBuf[i];
 	pzBuf[i] = trapBuf[i-1] + sum*(1/tau);
@@ -155,7 +161,7 @@ double streamer::doPolezeroBasic(int startIndex, int endIndex, double sum, doubl
 
 /**************************************************************/
 
-void streamer::doBaselineRestorationCC(int startIndex, int endIndex, int startTS, int DV) {
+void streamer::doBaselineRestorationCC(int startIndex, int endIndex, int startTS, int DV, int first) {
 
   int j=0;
   long int ledTS = 0;
@@ -163,7 +169,7 @@ void streamer::doBaselineRestorationCC(int startIndex, int endIndex, int startTS
     
   for (int i=startIndex; i<endIndex; i++) {
 
-    if (i+startTS > 2*EM+EK) {
+    if ( (i+startTS > 2*EM+EK) ) {
       if (ledOUT.size() > 0) {
 	if (i == (ledOUT[j]-startTS-10)) {
 	  ledTS = (ledOUT[j]-startTS);  BLRinhibit = 1;  j++;
@@ -193,7 +199,7 @@ void streamer::doBaselineRestorationCC(int startIndex, int endIndex, int startTS
 
 /**************************************************************/
 
-void streamer::doBaselineRestorationM2(int startIndex, int endIndex, int startTS, int DV) {
+void streamer::doBaselineRestorationM2(int startIndex, int endIndex, int startTS, int DV, int first) {
 
   int j=0;
   long int ledTS = 0;
@@ -205,7 +211,7 @@ void streamer::doBaselineRestorationM2(int startIndex, int endIndex, int startTS
 
     if (ledOUT.size() > 0) {
       if (i == (ledOUT[j]-startTS-10)) {
-	ledTS = (ledOUT[j]-startTS);  BLRinhibit = 1;  j++;
+	ledTS = (ledOUT[j]);  BLRinhibit = 1;  j++;
       }
     }
     if (i > (ledTS + 2*EM + EK)) {
@@ -285,12 +291,12 @@ std::vector<double> streamer::doEnergyFixedPickOff(double *in, int pickOff, int 
 	if ( ((ledOUT[j]-ledOUT[j-1])< EM+EK) ||
 	     ((ledOUT[j+1]-ledOUT[j])< EM+EK) ) {
 	  (*pileUp)++; piledUp = 1;
-	  energies.push_back((in[ledOUT[j]-startTS + pickOff] - in[ledOUT[j]-startTS-10])/32.);
+	  energies.push_back((in[ledOUT[j]-startTS + pickOff])/32.);
 	  energies.push_back(1);
 	} else { piledUp = 0; }
 	if (!piledUp) {
 	  // energies.push_back(in[ledOUT[j]-startTS + pickOff])
-	  energies.push_back((in[ledOUT[j]-startTS + pickOff] - in[ledOUT[j]-startTS-10])/32.);
+	  energies.push_back((in[ledOUT[j]-startTS + pickOff])/32.);
 	  energies.push_back(0);
 	}
 	j++;

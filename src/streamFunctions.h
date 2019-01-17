@@ -44,12 +44,13 @@ class streamer : public TObject {
   int Initialize(TString inputFileName);
   int Reset(int overlap);
   int calculateLEDlevel(int index, int thresh);
-  int doLEDfilter(int startIndex, int endIndex, int startTS);
+  void doLEDfilter(int startIndex, int endIndex, int first);
+  int getLEDcrossings(int startIndex, int endIndex, int first);
   double baseline(int index);
-  void doTrapezoid(int startIndex, int endIndex);
-  double doPolezeroBasic(int startIndex, int endIndex, double sum, double tau);
-  void doBaselineRestorationCC(int startIndex, int endIndex, int startTS, int DV);
-  void doBaselineRestorationM2(int startIndex, int endIndex, int startTS, int DV);
+  void doTrapezoid(int startIndex, int endIndex, int first);
+  double doPolezeroBasic(int startIndex, int endIndex, double sum, double tau, int first);
+  void doBaselineRestorationCC(int startIndex, int endIndex, int startTS, int DV, int first);
+  void doBaselineRestorationM2(int startIndex, int endIndex, int startTS, int DV, int first);
   void doBaselineRestorationSZ();
   std::vector<double> doEnergyPeakFind(double *in, int startIndex, int endIndex, int startTS, int *pileUp);
   std::vector<double> doEnergyFixedPickOff(double *in, int pickOff, int startIndex, int endIndex, int startTS, int *pileUp);

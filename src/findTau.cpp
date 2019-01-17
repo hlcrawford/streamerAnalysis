@@ -71,7 +71,8 @@ int main(int argc, char **argv) {
     else { indexStart = overlapWidth; }
 
     /* Actual analysis is from these functions for a given chunk of waveform */
-    ledCrossings = data->doLEDfilter(indexStart, curr, startTS);
+    data->doLEDfilter(indexStart, curr, startTS);
+    ledCrossings = data->getLEDcrossings(indexStart, curr, startTS);
     ledCrossing += ledCrossings;
 
     double averageTrigger = 0;
