@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <iostream>
+#include <signal.h>
 
 #include "TFile.h"
 #include "TH1.h"
@@ -13,17 +14,18 @@
 
 #define OUTPUTFILE "tr.out"
 
+int gotsignal;
+void breakhandler(int dummy) {
+  printf("Got break signal.  Aborting cleanly...\n");
+  gotsignal = 1;
+}
+
 int main(int argc, char **argv) {
 
   FILE *fout;
-  int num, curr, i, newRead;
+  int num, curr, newRead;
 
   int nReads = 10000;
-  int overlapWidth = 2*(2*EM + EK);
-
-  double tau = 5000; /* 50us nominal = 5000 clock ticks */
-  int DV = 8;
-  int ledThresh = 50;
   
   unsigned long long int ledCrossings;
   int ledCrossing = 0;
@@ -34,64 +36,73 @@ int main(int argc, char **argv) {
   long long int ledTS = 0;
   long long int currTS = 0;
 
-  int inhibitBLR = 0;
-  int withBLR = 0;
-  long long int BLRi = 1;
-
+  int withBLR = 1;
   int invert = 0;
 
   std::vector<double> energies;
-  
-  double peak = 0;
-  
-  if (argc < 4) {
-    fprintf(stderr, "Minimum usage: readTrace <input filename> <tau> <BLR constant> <nReads> <rootOutputName> <ledThreshold> <invert? = 0>\n");
+    
+  if (argc < 9) {
+    fprintf(stderr, "Minimum usage: Analyze -fIn <input filename> -fOut <rootOutputName> -fSet <settingsName> -n <nReads> \n");
     exit(1);
   }
+  
+  TString rootoutputName, inputName, fileNameSet;
+  int inputFile = 0, outputFile = 0, setFile = 0;
 
-  TString inputName = argv[1];
-  printf("Input: %s\n", argv[1]); 
-  sscanf(argv[2], "%lf", &tau);
-  sscanf(argv[3], "%d", &DV);  DV -= 16;
-  if (argc >= 4) { sscanf(argv[4], "%d", &nReads); } else { nReads = 1000000; }
-  if (nReads == -1) { nReads = 1000000; }
-  TString rootoutputName;
-  if (argc >= 5) {
-    rootoutputName = argv[5];  
-    printf("ROOT Output: %s\n", argv[5]);
-  } else { 
-    rootoutputName = "out.root"; 
-    printf("ROOT Output: %s\n", "out.root");  
+  int i = 1;
+  while (i < argc) {
+    if (strcmp(argv[i], "-fIn") == 0) {
+      inputName = argv[i+1]; i++; i++;
+      inputFile = 1;
+    } else if (strcmp(argv[i], "-fOut") == 0) {
+      rootoutputName = argv[i+1]; i++; i++;
+      outputFile = 1;
+    } else if (strcmp(argv[i], "-fSet") == 0) {
+      fileNameSet = argv[i+1]; i++; i++;
+      setFile = 1;
+    } else if (strcmp(argv[i], "-n") == 0) {
+      sscanf(argv[i+1], "%d", &nReads);
+      if (nReads == -1) { nReads = 1000000; }
+      i++; i++;
+    } else {
+      cout << ALERTTEXT;
+      printf("Error -- unrecognized input flag: <%s>\n", argv[i]);
+      cout << RESET_COLOR; fflush(stdout);
+      exit(-1);
+    }
   }
-  if (argc >= 6) { 
-    sscanf(argv[6], "%d", &ledThresh); 
-    printf("LED threshold = %d\n", ledThresh);
+
+  if (!inputFile || !outputFile) {
+    cout << ALERTTEXT;
+    printf("Error -- missing arguments!  Try again!\n");
+    cout << RESET_COLOR; fflush(stdout);
+    exit(-1);
   }
-  if (argc >= 8) {
-    sscanf(argv[7], "%d", &invert);
+  if (!setFile) {
+    fileNameSet = "settings.set";
   }
   
   streamer *data = new streamer(invert);
-  curr = data->Initialize(inputName);
+  curr = data->Initialize(inputName, fileNameSet);
+
+  int overlapWidth = 2*(2*data->EM + data->EK);
   curr -= overlapWidth/2;
-  data->setTau(tau);
-  data->setDV(DV);
-  data->setLEDThresh(ledThresh);
-
+ 
+  /* Initialize ROOT output stuff */
   g3OUT *g3 = new g3OUT();
-
   g3CrystalEvent g3xtal;
   g3ChannelEvent g3ch;
   
   TFile *rootOUT = new TFile(rootoutputName.Data(), "RECREATE");
   TTree *teb = new TTree("teb", "Tree - with data stuff");
   teb->Branch("g3", "g3OUT", &(g3));
-
-  TH1F *rawEnergy = new TH1F("rawEnergy", "rawEnergy", 30000, -300, 300);
   
+  TH1F *rawEnergy = new TH1F("rawEnergy", "rawEnergy", 30000, 0, 300000);
+  
+  /* Initialize file for chunk of waveform output */
   fout = fopen(OUTPUTFILE, "w");
   if (fout == 0) {
-    fprintf(stderr, "cannot open the output file %s\n", OUTPUTFILE);
+    fprintf(stderr, "Cannot open the output file %s\n", OUTPUTFILE);
     exit(1);
   } else {
     printf("Opened text output file %s\n", OUTPUTFILE);
@@ -109,29 +120,39 @@ int main(int argc, char **argv) {
     /* First basic filtering ... 
           for first read, we go from [0] to [END - 1/2 of overlap]
 	  for subsequent reads, we go from [1/2 of overlap] to [END - 1/2 of overlap] */
-    data->doTrapezoid(indexStart, curr, numberOfReads);    
-    pzSum = data->doPolezeroBasic(indexStart, curr, pzSum, tau, numberOfReads);
-
     data->doLEDfilter(indexStart, curr, startTS);
     ledCrossings = data->getLEDcrossings(indexStart, curr, startTS);
     ledCrossing += ledCrossings;
+
+    /* Filling histogram with locally optimized energy value... */
+    for (i=0; i<data->ledOUT.size(); i++) {
+      if (data->ledOUT[i]-startTS-3*(2*data->EM + data->EK) > 0 && data->ledOUT[i]-startTS+6*(2*data->EM + data->EK) < curr) {
+	rawEnergy->Fill(data->doLocalPZandEnergy(data->ledOUT[i]-startTS-3*(2*data->EM + data->EK), data->ledOUT[i]-startTS+6*(2*data->EM + data->EK), 
+						 data->ledOUT[i]-startTS, data->tau));
+      }
+    }
+
+    data->doTrapezoid(indexStart, curr, startTS, numberOfReads);    
+    pzSum = data->doPolezeroBasic(indexStart, curr, pzSum, numberOfReads);
     
     printf("numberOfReads = %d, ledCrossing = %d\r", numberOfReads, ledCrossing);
     
+
     /* Making this work over boundaries is going to take some thinking... */
 
-    //data->doBaselineRestorationCC(indexStart, curr, startTS, DV, numberOfReads);
-    //data->doBaselineRestorationM2(indexStart, curr, startTS, DV, numberOfReads);
+    data->doBaselineRestorationCC(indexStart, curr, startTS, numberOfReads);
+    //data->doBaselineRestorationM2(indexStart, curr, startTS, numberOfReads);
 
-    if(withBLR) {
-      energies = data->doEnergyPeakFind(data->pzBLBuf, 0, curr-overlapWidth, startTS, &pileUp);
+    if(data->useBLR) {
+      if (!data->usePO) { energies = data->doEnergyPeakFind(data->pzBLBuf, 0, curr-overlapWidth, startTS, &pileUp); }
+      else if (data->usePO) {	energies = data->doEnergyFixedPickOff(data->pzBLBuf, indexStart-overlapWidth/2, curr, startTS, &pileUp); }
     } else {
-      energies = data->doEnergyPeakFind(data->pzBuf, indexStart, curr, startTS, &pileUp);
-      //energies = data->doEnergyFixedPickOff(data->pzBuf, 470, indexStart-overlapWidth/2, curr, startTS, &pileUp);
+      if (!data->usePO) { energies = data->doEnergyPeakFind(data->pzBuf, indexStart, curr, startTS, &pileUp); }
+      else if (data->usePO) { energies = data->doEnergyFixedPickOff(data->pzBuf, indexStart-overlapWidth/2, curr, startTS, &pileUp); }
     }
 
     /* Write out the events in this chunk of data... */
-    for (int i=0; i<data->ledOUT.size(); i++) {
+    for (i=0; i<data->ledOUT.size(); i++) {
       // if (data->ledOUT[i] <= startTS + curr - overlapWidth) {
 	g3ch.Clear();
 	g3ch.timestamp = data->ledOUT[i];
@@ -146,7 +167,7 @@ int main(int argc, char **argv) {
 	g3ch.deltaT2 = data->ledOUT[i-1]-data->ledOUT[i-2];
 	
 	g3ch.hdr0 = numberOfReads;
-	g3ch.hdr1 = data->ledOUT[i] - startTS;
+	g3ch.CFDtimestamp = data->ledOUT[i] - startTS;
 
 	/* Pull out the WF */
 	g3ch.wf.raw.clear();
@@ -172,8 +193,6 @@ int main(int argc, char **argv) {
 	//data->ledOUT.erase(data->ledOUT.begin(), data->ledOUT.begin()+1);
     }
 
-    for (int i=0; i<energies.size(); i++) { rawEnergy->Fill(energies[i]); }
-    
     energies.clear();
     data->ledOUT.clear();
     
@@ -196,7 +215,7 @@ int main(int argc, char **argv) {
   rootOUT->Close();
   
   fprintf(fout, "index/I:wf/I:led/I:trapE/I:pz/F:pzBL/F\n");      
-  for (i=0; i<curr; i++) {
+  for (i=0; i<curr/10; i++) {
     fprintf(fout, "%d %d %d %d %f %f\n", i, data->wf[i], data->ledBuf[i], data->trapBuf[i], data->pzBuf[i], data->pzBLBuf[i]);
   }
 }

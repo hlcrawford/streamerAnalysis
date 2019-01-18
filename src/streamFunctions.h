@@ -15,11 +15,7 @@
 
 #include "colors.h"
 
-#define READSIZE 1024*1024
-
-#define LEDK 5
-#define EK 100 
-#define EM 400
+#define READSIZE 1000*1000*10 //0.1 seconds at a time...
 
 class streamer : public TObject {
 
@@ -29,35 +25,65 @@ class streamer : public TObject {
   short int *wf; // raw trace buffer
   int *ledBuf, *trapBuf;
   double *pzBuf, *subBL1, *subBL2, *BL1, *BL2, *pzBLBuf;
+  double *tempBuf;
   std::vector<long int> ledOUT;
   
   int bytesRead;
+
   double tau;
   int DV;
   int LEDThreshold;
+  int BLRinhibitLength, BLRretrigger;
 
   int invertWF;
+
+  int EK, EM, LEDK;
+  int useBLR; int usePO;
+  int POtime;
   
  public:
   streamer(int invert) { invertWF = invert; }
   ~streamer() {;}
-  int Initialize(TString inputFileName);
+  int Initialize(TString inputFileName, TString setFileName);
   int Reset(int overlap);
+  int getSettings(TString setFile);
   int calculateLEDlevel(int index, int thresh);
   void doLEDfilter(int startIndex, int endIndex, int first);
   int getLEDcrossings(int startIndex, int endIndex, int first);
   double baseline(int index);
-  void doTrapezoid(int startIndex, int endIndex, int first);
-  double doPolezeroBasic(int startIndex, int endIndex, double sum, double tau, int first);
-  void doBaselineRestorationCC(int startIndex, int endIndex, int startTS, int DV, int first);
-  void doBaselineRestorationM2(int startIndex, int endIndex, int startTS, int DV, int first);
-  void doBaselineRestorationSZ();
+  void doTrapezoid(int startIndex, int endIndex, int startTS, int first);
+  double doPolezeroBasic(int startIndex, int endIndex, double sum, int first);
+  double doLocalPZandEnergy(int startIndex, int endIndex, int LEDIndex, double tau);
+  void doBaselineRestorationCC(int startIndex, int endIndex, int startTS, int first);
+  void doBaselineRestorationM2(int startIndex, int endIndex, int startTS, int first);
   std::vector<double> doEnergyPeakFind(double *in, int startIndex, int endIndex, int startTS, int *pileUp);
-  std::vector<double> doEnergyFixedPickOff(double *in, int pickOff, int startIndex, int endIndex, int startTS, int *pileUp);
+  std::vector<double> doEnergyFixedPickOff(double *in, int startIndex, int endIndex, int startTS, int *pileUp);
 
   void setTau(double itau) { tau = itau; }
-  void setDV(double iDV) { DV = iDV; }
   void setLEDThresh(double iLEDThreshold) { LEDThreshold = iLEDThreshold; }
+  void setIntTime(int iEM) { EM = iEM; }
+  void setGapTime(int iEK) { EK = iEK; }
+  void setLEDIntTime(int iEK) { LEDK = iEK; }
+  void setBLRValue(int iDV) { DV = iDV; }
+  void setBLRInhibit(int iBLRi) { BLRinhibitLength = iBLRi; }
+  void setBLRTrigger(int iBLRT) { BLRretrigger = iBLRT; }
+  void setBLR(int iBLR) { useBLR = iBLR; }
+  void setEnergyPO(int iPO) { usePO = iPO; }
+  void setPOTime(int iPOT) { POtime = iPOT; }
+
+  double getTau() { return tau; }
+  int getDV() { return DV; }
+  int getLEDThresh() { return LEDThreshold; }
+  int getIntTime() { return EM; }
+  int getGapTime() { return EK; }
+  int getLEDIntTime() { return LEDK; }
+  int getBLRValue() { return DV; }
+  int getBLRInhibit() { return BLRinhibitLength; }
+  int getBLRTrigger() { return BLRretrigger; }
+  int getBLR() { return useBLR; }
+  int getEnergyPO() { return usePO; }
+  int getPOTime() { return POtime; }
+
   
   ClassDef(streamer, 1);
 };

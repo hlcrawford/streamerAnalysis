@@ -1,6 +1,6 @@
 #include "streamFunctions.h"
 
-int streamer::Initialize(TString inputFileName) {
+int streamer::Initialize(TString inputFileName, TString setFileName) {
   wf = (short int*)calloc(READSIZE, sizeof(short int));
   ledBuf = (int*)calloc(READSIZE, sizeof(int));
   trapBuf = (int*)calloc(READSIZE, sizeof(int));
@@ -10,8 +10,25 @@ int streamer::Initialize(TString inputFileName) {
   BL1 = (double*)calloc(READSIZE, sizeof(double));
   BL2 = (double*)calloc(READSIZE, sizeof(double));
   pzBLBuf = (double*)calloc(READSIZE, sizeof(double));
+  tempBuf = (double*)calloc(READSIZE, sizeof(double));
   
   BL1[0] = 0;  BL2[0] = 0; subBL1[0] = 0; subBL2[0] = 0;
+
+  tau = 0.; DV = 0; LEDThreshold = 0; BLRinhibitLength = 0; BLRretrigger = 0; 
+  EK = 0;  EM = 0;  LEDK = 0; 
+  useBLR = 0;  usePO = 0;
+  POtime = 0;
+
+  getSettings(setFileName);
+
+  if (tau == 0) { tau = 5000.; }
+  if (EK == 0) { EK = 50; }
+  if (EM == 0) { EM = 400; }
+  if (LEDK == 0) { LEDK = 5; }
+  if (DV == 0) { DV = 8; }
+  if (LEDThreshold == 0) { LEDThreshold = 50; }
+  if (BLRinhibitLength == 0) { BLRinhibitLength = EM*2 + EK + 300; }
+  if (BLRretrigger == 0) { BLRretrigger = -1; }
 
   //inputFileName = "zcat " + inputFileName;
   //fin = popen(inputFileName.Data(), "r");
@@ -41,6 +58,7 @@ int streamer::Reset(int overlap) {
     BL1[i] = BL1[READSIZE-overlap+i];
     BL2[i] = BL2[READSIZE-overlap+i];
     pzBLBuf[i] = pzBLBuf[READSIZE-overlap+i];
+    tempBuf[i] = 0.0;
   }
 
   for (int i=overlap; i<READSIZE; i++) {
@@ -53,6 +71,7 @@ int streamer::Reset(int overlap) {
     BL1[i] = 0.0;
     BL2[i] = 0.0;
     pzBLBuf[i] = 0.0;
+    tempBuf[i] = 0.0;
   }
 
   ledOUT.clear();
@@ -64,6 +83,82 @@ int streamer::Reset(int overlap) {
   return num;
   
 }
+
+/**************************************************************/
+
+int streamer::getSettings(TString setFile) {
+  FILE *fin;
+  char *p, *line, str[512] = {'0'}, str1[512] = {'0'};
+  int nn = 0, nret = 0;
+  int d1 = 0;
+  float f1 = 0.0;
+  
+  if ((fin = fopen(setFile.Data(), "r")) == NULL) {
+    cout << ALERTTEXT;
+    printf("getSettings(): Could not open settings file \"%s\"\n", setFile.Data());
+    cout << RESET_COLOR;
+    return -1;
+  } else {
+    printf("getSettings(): Opened file \"%s\"\n", setFile.Data());
+    fflush(stdout);
+  }
+
+  line = fgets(str, 512, fin);
+  while (line != NULL) {
+    if (str[0] == 35 || str[0] == 59 || str[0] == 10) {
+      /* Do nothing -- empty or comment lines */
+    } else if ((p = strstr(str, "Tau")) != NULL) {
+      nret = sscanf(str, "%s %f", str1, &f1);
+      setTau(f1);
+    } else if ((p = strstr(str, "Integration time")) != NULL) {
+      nret = sscanf(str, "%s %d", str1, &d1);
+      setIntTime(d1);
+    } else if ((p = strstr(str, "Gap (flat-top) time")) != NULL) {
+      nret = sscanf(str, "%s %d", str1, &d1);
+      setGapTime(d1);
+    } else if ((p = strstr(str, "LED integration time")) != NULL) {
+      nret = sscanf(str, "%s %d", str1, &d1);
+      setLEDIntTime(d1);
+    } else if ((p = strstr(str, "LED threshold")) != NULL) {
+      nret = sscanf(str, "%s %d", str1, &d1);
+      setLEDThresh(d1);
+    } else if ((p = strstr(str, "BLR time constant")) != NULL) {
+      nret = sscanf(str, "%s %d", str1, &d1);
+      setBLRValue(d1);
+    } else if ((p = strstr(str, "BLR inhibit length")) != NULL) {
+      nret = sscanf(str, "%s %d", str1, &d1);
+      setBLRInhibit(d1);
+    } else if ((p = strstr(str, "BLR retrigger")) != NULL) {
+      nret = sscanf(str, "%s %d", str1, &d1);
+      setBLRTrigger(d1);
+    } else if ((p = strstr(str, "Do BLR?")) != NULL) {
+      nret = sscanf(str, "%s %d", str1, &d1);
+      setBLR(d1);
+    } else if ((p = strstr(str, "Do fixed time pickoff for energy?")) != NULL) {
+      nret = sscanf(str, "%s %d", str1, &d1);
+      setEnergyPO(d1);
+    } else if ((p = strstr(str, "Fixed pickoff time")) != NULL) {
+      nret = sscanf(str, "%s %d", str1, &d1);
+      setPOTime(d1);
+    } else {
+      /* Unknown command */
+      cout << ALERTTEXT;
+      printf("getSettings(): Unknown command \"%s\"\n", str);
+      printf("               ----> Aborting!!\n");
+      cout << RESET_COLOR;  fflush(stdout);
+      return -1;
+    }
+
+    nn++; line = fgets(str, 512, fin);
+  }
+
+  fclose(fin);
+  printf("getSettings(): Settings file closed.\n");
+  fflush(stdout);
+  return (0);
+
+}
+
 
 /**************************************************************/
 
@@ -118,7 +213,7 @@ double streamer::baseline(int index) {
 
 /**************************************************************/
 
-void streamer::doTrapezoid(int startIndex, int endIndex, int first) {
+void streamer::doTrapezoid(int startIndex, int endIndex, int startTS, int first) {
 
   /* Trapezoid filter straight out of Jordanov and Knoll, NIM A 345, 337 (1994). */
   /* Initialize for now assuming no pulse at the start of the data... */
@@ -132,17 +227,45 @@ void streamer::doTrapezoid(int startIndex, int endIndex, int first) {
     }
   }
   
+  /* This shouldn't be allowed, but I'm going to give a shot.
+     Find the DC offset and remove it.  */
+  int values = 0;
+  int nValue = 0;
+  int iLED = 0;
+  for (int j=startIndex; j<endIndex; j++) {
+    if (j < ledOUT[iLED]) {
+      values += trapBuf[j];
+      nValue++;
+    } else if (j > (ledOUT[iLED]-startTS) && j<(ledOUT[iLED]-startTS+500*(2*EK+EM))) {
+      /* Nothing. */
+    } else if (j==(ledOUT[iLED]-startTS+500*(2*EK+EM)) || (j==startIndex && j>(ledOUT[iLED]-startTS)) ) {
+      iLED++;
+    }
+    if (iLED >= ledOUT.size()) { j = endIndex; }
+  }
+  if (nValue != 0) {
+    values /= nValue;
+  } else { values = 0; }
+  
+  for (int i=startIndex; i<endIndex; i++) {
+    if (i == 0 && first == 1) { trapBuf[i] = 0; }
+    else if (i <= (2*EM+EK) && first == 1) { trapBuf[i] = 0; }
+    else if ( (i > (2*EM+EK) && first == 1) || first != 1) {
+      trapBuf[i] -= values;
+    }
+  }
+
 }
 
 /**************************************************************/
 
-double streamer::doPolezeroBasic(int startIndex, int endIndex, double sum, double tau, int first) {
+double streamer::doPolezeroBasic(int startIndex, int endIndex, double sum, int first) {
 
   /* Initialization is a problem here... */
 
   for (int i=startIndex; i<endIndex; i++) {
     if (i < (2*EM+EK) && first == 1) { pzBuf[i] = 0.; }
-    else if (i == (2*EM+EK) && first == 1) { pzBuf[i] = trapBuf[i-1]; }
+    else if (i == (2*EM+EK) && first == 1) { pzBuf[i] = 0.; }
     else if ((i > (2*EM+EK) && first == 1) || (first != 1)) {
       if (sum>0) {
 	sum += (double)trapBuf[i];
@@ -161,36 +284,121 @@ double streamer::doPolezeroBasic(int startIndex, int endIndex, double sum, doubl
 
 /**************************************************************/
 
-void streamer::doBaselineRestorationCC(int startIndex, int endIndex, int startTS, int DV, int first) {
+double streamer::doLocalPZandEnergy(int startIndex, int endIndex, int LEDIndex, double tau) {
 
+  int sumL = 0;
+
+  double BL = 0.0;
+  int nBL = 0;
+  
+  for (int i=startIndex; i<LEDIndex - 30; i++) {
+    BL += (double)wf[i];
+    nBL++;
+  }
+  BL /= (double)nBL;
+  
+  for (int i=startIndex; i<endIndex; i++) {
+    if (i < (2*EM+EK)) { tempBuf[i] = 0.; }
+    else if (i == (2*EM+EK)) { tempBuf[i] = 0.; }
+    else if (i > (2*EM+EK)) {
+      sumL += (double)wf[i] - BL;
+      tempBuf[i] = wf[i-1] - BL + sumL*(1/tau);
+    }
+  }
+      
+  double pre = 0.0, post = 0.0;
+  for (int i=0; i<EM; i++) {
+    pre += tempBuf[i+startIndex];
+    post += tempBuf[i+LEDIndex+100];
+  }
+      
+  return (post-pre)/32.;
+  
+}
+
+/**************************************************************/
+
+// double streamer::doPolezero2Poles(int startIndex, int endIndex, double sum, double tau, double tau2, int first) {
+
+//   for (int i=startIndex; i<endIndex; i++) {
+//     if (i < (2*EM+EK) && first == 1) { pzBuf[i] = 0.; }
+//     else if (i == (2*EM+EK) && first == 1) { pzBuf[i] = 0.; }
+//     else if ((i > (2*EM+EK) && first == 1) || (first != 1)) {
+//       if (sum>0) {
+// 	sum += (double)trapBuf[i];
+// 	pzBuf[i] = trapBuf[i-1] + sum*(1/tau)*(1/tau2);
+//       } else {
+// 	sum += (double)trapBuf[i];
+// 	pzBuf[i] = trapBuf[i-1] + sum*(1/tau)*(1/tau2);
+//       }
+//     }
+//     //printf("%d %d %f %f\n", i, trapBuf[i], sum, pzBuf[i]);
+//   }
+
+//   return sum;
+  
+// }
+
+/**************************************************************/
+
+void streamer::doBaselineRestorationCC(int startIndex, int endIndex, int startTS, int first) {
+
+  int iLED =0;
+  int BLRinhibit = 0, BLRinhibitP = 0;
+  int countdown = 0;
+  int numRetriggers = 0;
   int j=0;
   long int ledTS = 0;
-  int BLRinhibit = 0;
+
+  double div = pow(2., DV);
     
   for (int i=startIndex; i<endIndex; i++) {
 
-    if ( (i+startTS > 2*EM+EK) ) {
-      if (ledOUT.size() > 0) {
-	if (i == (ledOUT[j]-startTS-10)) {
-	  ledTS = (ledOUT[j]-startTS);  BLRinhibit = 1;  j++;
+    if (ledOUT.size() > 0) {
+      if (i > ledOUT[iLED]-startTS && i == startIndex) { iLED++; }
+      
+      /* We see an LED -- inhibit for duration inhibitLength */
+      if (i == (ledOUT[iLED]-startTS)) {
+	/* Check if this is a re-trigger */
+	if (countdown !=0) {
+	  numRetriggers++;
+	  if ((numRetriggers <= BLRretrigger) ||(BLRretrigger = -1)) {
+	    BLRinhibit = 1;  
+	    countdown = BLRinhibitLength;
+	  } else { /* Don't retrigger anymore, just cross our fingers this
+		      doesn't become a mess. */
+	    BLRinhibit = 0;
+	    countdown = 0;
+	    numRetriggers = 0;
+	  }
+	  iLED++;
+	} else {
+	  BLRinhibit = 1;
+	  countdown = BLRinhibitLength;
+	  iLED++;
+	}
+      } else {
+	if (countdown > 0) { 
+	  countdown--;
+	  BLRinhibit = 1;
+	} else {
+	  BLRinhibit = 0;
+	  numRetriggers = 0;
 	}
       }
-      if (i > (ledTS + 2*EM + EK)) {
-	BLRinhibit = 0;
-      }
+    }	
       
-      subBL1[i] = (pzBuf[i-1]-BL1[i-1])*(pow(2., DV));
-      subBL2[i] = (BL1[i-1]-BL2[i-1])*(pow(2., DV));
-      
-      if (!BLRinhibit) {
-	BL1[i] = BL1[i-1] + subBL1[i-1];
-	BL2[i] = BL2[i-1] + subBL2[i-1];
-      } else {
-	BL1[i] = BL1[i-1];
-	BL2[i] = BL2[i-1];
-      }
+    subBL1[i] = (pzBuf[i-1]-BL1[i-1])*div;
+    subBL2[i] = (BL1[i-1]-BL2[i-1])*div;
+    
+    if (!BLRinhibit) {
+      BL1[i] = BL1[i-1] + subBL1[i-1];
+      BL2[i] = BL2[i-1] + subBL2[i-1];
+    } else {
+      BL1[i] = BL1[i-1];
+      BL2[i] = BL2[i-1];
     }
-
+  
     pzBLBuf[i] = pzBuf[i] - BL2[i];
     
   }
@@ -199,24 +407,54 @@ void streamer::doBaselineRestorationCC(int startIndex, int endIndex, int startTS
 
 /**************************************************************/
 
-void streamer::doBaselineRestorationM2(int startIndex, int endIndex, int startTS, int DV, int first) {
+void streamer::doBaselineRestorationM2(int startIndex, int endIndex, int startTS, int first) {
 
-  int j=0;
-  long int ledTS = 0;
-  int BLRinhibit = 0;
+  /* This corresponds to my understanding of the MatLab function "baserestoration11_v2.m", 
+     but limited to 'self' inhibition only (none of this segment vs. CC inhibiting stuff). */
+
+  int iLED =0;
+  int BLRinhibit = 0, BLRinhibitP = 0;
+  int countdown = 0;
+  int numRetriggers = 0;
 
   double div = pow(2., DV);
   
   for (int i=startIndex; i<endIndex; i++) {
 
     if (ledOUT.size() > 0) {
-      if (i == (ledOUT[j]-startTS-10)) {
-	ledTS = (ledOUT[j]);  BLRinhibit = 1;  j++;
+      if (i > ledOUT[iLED]-startTS && i == startIndex) { iLED++; }
+      
+      /* We see an LED -- inhibit for duration inhibitLength */
+      if (i == (ledOUT[iLED]-startTS)) {
+	/* Check if this is a re-trigger */
+	if (countdown !=0) {
+	  numRetriggers++;
+	  if ((numRetriggers <= BLRretrigger) ||(BLRretrigger = -1)) {
+	    BLRinhibit = 1;  
+	    countdown = BLRinhibitLength;
+	  } else { /* Don't retrigger anymore, just cross our fingers this
+		      doesn't become a mess. */
+	    BLRinhibit = 0;
+	    countdown = 0;
+	    numRetriggers = 0;
+	  }
+	  iLED++;
+	} else {
+	  BLRinhibit = 1;
+	  countdown = BLRinhibitLength;
+	  iLED++;
+	}
+      } else {
+	if (countdown > 0) { 
+	  countdown--;
+	  BLRinhibit = 1;
+	} else {
+	  BLRinhibit = 0;
+	  numRetriggers = 0;
+	}
       }
-    }
-    if (i > (ledTS + 2*EM + EK)) {
-      BLRinhibit = 0;
-    }
+    }	
+
     if (!BLRinhibit) {
       BL1[i] = BL1[i-1]*(1-div) + pzBuf[i];
       subBL1[i] = BL1[i]*(div);
@@ -229,17 +467,11 @@ void streamer::doBaselineRestorationM2(int startIndex, int endIndex, int startTS
       subBL2[i] = subBL2[i-1];
     }
     
+    BLRinhibitP = BLRinhibit;
+
     pzBLBuf[i] = pzBuf[i] - subBL2[i];
     
   }
-
-}
-
-/**************************************************************/
-
-void streamer::doBaselineRestorationSZ() {
-  
-
 
 }
 
@@ -278,7 +510,7 @@ std::vector<double> streamer::doEnergyPeakFind(double *in, int startIndex, int e
   return energies;
 }
 
-std::vector<double> streamer::doEnergyFixedPickOff(double *in, int pickOff, int startIndex, int endIndex, int startTS, int *pileUp) {
+std::vector<double> streamer::doEnergyFixedPickOff(double *in, int startIndex, int endIndex, int startTS, int *pileUp) {
 
   std::vector<double> energies;
   if (ledOUT.size() > 0) {
@@ -291,12 +523,11 @@ std::vector<double> streamer::doEnergyFixedPickOff(double *in, int pickOff, int 
 	if ( ((ledOUT[j]-ledOUT[j-1])< EM+EK) ||
 	     ((ledOUT[j+1]-ledOUT[j])< EM+EK) ) {
 	  (*pileUp)++; piledUp = 1;
-	  energies.push_back((in[ledOUT[j]-startTS + pickOff])/32.);
+	  energies.push_back((in[ledOUT[j]-startTS + POtime])/32.);
 	  energies.push_back(1);
 	} else { piledUp = 0; }
 	if (!piledUp) {
-	  // energies.push_back(in[ledOUT[j]-startTS + pickOff])
-	  energies.push_back((in[ledOUT[j]-startTS + pickOff])/32.);
+	  energies.push_back((in[ledOUT[j]-startTS + POtime])/32.);
 	  energies.push_back(0);
 	}
 	j++;

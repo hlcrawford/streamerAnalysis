@@ -10,15 +10,18 @@
 
 #include "streamFunctions.h"
 
+int gotsignal;
+void breakhandler(int dummy) {
+  printf("Got break signal.  Aborting cleanly...\n");
+  gotsignal = 1;
+}
+
 int main(int argc, char **argv) {
 
   FILE *fout;
   int num, curr, i, newRead;
 
   int nReads = 10000;
-  int overlapWidth = 2*EM + EK + 100;
-
-  int ledThresh = 50;
   
   unsigned long long int ledCrossings;
   int ledCrossing = 0;
@@ -27,39 +30,74 @@ int main(int argc, char **argv) {
   long long int ledTS = 0;
   long long int currTS = 0;
 
+  int twoPoles = 0;
   int invert = 0;
 
-  Double_t xVal[1000], yVal[1000];
-  for (i=0; i<1000; i++) { xVal[i] = i; }
-  
-  if (argc < 5) {
-    fprintf(stderr, "Minimum usage: getTau <filename> <LED threshold> <nReads> <ROOT output> (<invert? == 0>) \n");
+  Double_t xVal[18000], yVal[18000];
+  for (i=0; i<18000; i++) { xVal[i] = i; }
+
+  if (argc < 9) {
+    fprintf(stderr, "Minimum usage: getTau -fIn <input filename> -fOut <rootOutputName> -fSet <settingsName> -n <nReads> \n");
     exit(1);
   }
+  
+  TString rootoutputName, inputName, fileNameSet;
+  int inputFile = 0, outputFile = 0, setFile = 0;
 
-  TString inputName = argv[1];
-  printf("Input: %s\n", argv[1]); 
-  sscanf(argv[2], "%d", &ledThresh);
-  sscanf(argv[3], "%d", &nReads); 
-  if (nReads == -1) { nReads = 1000000; }
-  TString rootoutputName;
-  rootoutputName = argv[4];  
-  printf("ROOT Output: %s\n", argv[4]);
-  if (argc == 6) {
-    sscanf(argv[5], "%d", &invert);
+  i = 1;
+  while (i < argc) {
+    if (strcmp(argv[i], "-fIn") == 0) {
+      inputName = argv[i+1]; i++; i++;
+      inputFile = 1;
+    } else if (strcmp(argv[i], "-fOut") == 0) {
+      rootoutputName = argv[i+1]; i++; i++;
+      outputFile = 1;
+    } else if (strcmp(argv[i], "-fSet") == 0) {
+      fileNameSet = argv[i+1]; i++; i++;
+      setFile = 1;
+    } else if (strcmp(argv[i], "-n") == 0) {
+      sscanf(argv[i+1], "%d", &nReads);
+    } else {
+      cout << ALERTTEXT;
+      printf("Error -- unrecognized input flag: <%s>\n", argv[i]);
+      cout << RESET_COLOR; fflush(stdout);
+      exit(-1);
+    }
   }
-    
+
+  if (!inputFile || !outputFile) {
+    cout << ALERTTEXT;
+    printf("Error -- missing arguments!  Try again!\n");
+    cout << RESET_COLOR; fflush(stdout);
+    exit(-1);
+  }
+  if (!setFile) {
+    fileNameSet = "settings.set";
+  }
+  
   streamer *data = new streamer(invert);
-  data->setLEDThresh(ledThresh);
-  curr = data->Initialize(inputName);
+  curr = data->Initialize(inputName, fileNameSet);
+  
+  int overlapWidth = 2*(2*data->EM + data->EK);
 
   TFile *rootOUT = new TFile(rootoutputName.Data(), "RECREATE");
 
   TGraph *gr;
-  TH2F *tauValues = new TH2F("tau", "tau", 3000, 0, 30000, 3000, 0, 3000);
-
-  TF1 *expofit = new TF1("expofit", "expo(0)");
-  expofit->SetParameters(100, -0.00015);
+  TH2F *tauValues;
+  if (!twoPoles) {
+    tauValues = new TH2F("tau", "tau", 3000, 0, 30000, 3000, 0, 3000);
+  } else {
+    tauValues = new TH2F("tau", "tau", 3000, 0, 30000, 3000, 0, 30000);
+  }
+  
+  TF1 *expofit;
+  if (!twoPoles) {
+    expofit = new TF1("expofit", "expo(0)");
+    expofit->SetParameters(100, -0.00015);
+  } else {
+    expofit = new TF1("expofit", "expo(0) + expo(2)");
+    expofit->SetParameters(7, -0.0003, 2, -0.00005);
+  }
 	
   startTS = 0;
   double pzSum = 0;
@@ -93,18 +131,31 @@ int main(int argc, char **argv) {
     printf("numberOfReads = %d, ledCrossing = %d\r", numberOfReads, ledCrossing);
 
     for (i=0; i<data->ledOUT.size(); i++) {
-      if ( (data->ledOUT[i+1] - data->ledOUT[i]) > 1500) {
-	for (int j=0; j<800; j++) { yVal[j] = data->wf[data->ledOUT[i] - startTS + 200 + j] - data->wf[data->ledOUT[i] - startTS - 10]; }
-	gr = new TGraph(800, xVal, yVal);
+      if ( (data->ledOUT[i+1] - data->ledOUT[i]) > 11000) {
+	for (int j=0; j<10000; j++) { yVal[j] = data->wf[data->ledOUT[i] - startTS + 200 + j] - data->wf[data->ledOUT[i] - startTS - 10]; }
+	gr = new TGraph(10000, xVal, yVal);
 	gr->Fit("expofit", "Q");
-	if (expofit->GetChisquare()/expofit->GetNDF() > 300) {
+	if (!twoPoles && expofit->GetChisquare()/expofit->GetNDF() > 300) {
 	  expofit->SetParameters(100, -0.00015);
+	  gr->Fit("expofit", "Q");
+	}
+	if (twoPoles && expofit->GetChisquare()/expofit->GetNDF() > 300) {
+	  expofit->SetParameters(7, -0.0003, 2, -0.00005);
 	  gr->Fit("expofit", "Q");
 	}
 	gr->SetName(Form("gr%d", i));
 	gr->Write();
-	tauValues->Fill(-1./expofit->GetParameter(1), expofit->GetChisquare()/expofit->GetNDF());
-	//printf("%d %f %f\n", i, 1./expofit->GetParameter(1), expofit->GetChisquare()/expofit->GetNDF());
+	if (!twoPoles) {
+	  tauValues->Fill(-1./expofit->GetParameter(1), expofit->GetChisquare()/expofit->GetNDF());
+	  printf("%d %f %f\n", i, 1./expofit->GetParameter(1), expofit->GetChisquare()/expofit->GetNDF());
+	} else {
+	  if (expofit->GetParameter(1) > expofit->GetParameter(3)) {
+	    tauValues->Fill(-1./expofit->GetParameter(1), -1./expofit->GetParameter(3));
+	  } else {
+	    tauValues->Fill(-1./expofit->GetParameter(3), -1./expofit->GetParameter(1));
+	  }
+	  printf("%d %f %f %f \n", i, -1./expofit->GetParameter(1), -1./expofit->GetParameter(3), expofit->GetChisquare()/expofit->GetNDF());
+	}
       }
     }
 
