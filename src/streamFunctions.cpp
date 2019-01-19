@@ -252,9 +252,10 @@ void streamer::doTrapezoid(int startIndex, int endIndex, int startTS, int first)
   }
   
   /* This shouldn't be allowed, but I'm going to give a shot.
-     Find the DC offset and remove it.  */
-  int values = 0;
+     Find the DC offset and just remove it.  */
+  long long int values = 0;
   int nValue = 0;
+  long long int offset = 0;
   int iLED = 0;
   for (int j=startIndex; j<endIndex; j++) {
     if (j < ledOUT[iLED]) {
@@ -268,14 +269,14 @@ void streamer::doTrapezoid(int startIndex, int endIndex, int startTS, int first)
     if (iLED >= ledOUT.size()) { j = endIndex; }
   }
   if (nValue != 0) {
-    values /= nValue;
+    offset = values/nValue;
   } else { values = 0; }
   
   for (int i=startIndex; i<endIndex; i++) {
     if (i == 0 && first == 1) { trapBuf[i] = 0; }
     else if (i <= (2*EM+EK) && first == 1) { trapBuf[i] = 0; }
     else if ( (i > (2*EM+EK) && first == 1) || first != 1) {
-      trapBuf[i] -= values;
+      trapBuf[i] -= offset;
     }
   }
 
@@ -285,21 +286,15 @@ void streamer::doTrapezoid(int startIndex, int endIndex, int startTS, int first)
 
 double streamer::doPolezeroBasic(int startIndex, int endIndex, double sum, int first) {
 
-  /* Initialization is a problem here... */
+  /* Initialization is a problem here probably */
 
   for (int i=startIndex; i<endIndex; i++) {
     if (i < (2*EM+EK) && first == 1) { pzBuf[i] = 0.; }
     else if (i == (2*EM+EK) && first == 1) { pzBuf[i] = 0.; }
     else if ((i > (2*EM+EK) && first == 1) || (first != 1)) {
-      if (sum>0) {
-	sum += (double)trapBuf[i];
-	pzBuf[i] = trapBuf[i-1] + sum*(1/tau);
-      } else {
-	sum += (double)trapBuf[i];
-	pzBuf[i] = trapBuf[i-1] + sum*(1/tau);
-      }
+      sum += (double)trapBuf[i];
+      pzBuf[i] = trapBuf[i-1] + sum*(1/tau);
     }
-    //printf("%d %d %f %f\n", i, trapBuf[i], sum, pzBuf[i]);
   }
 
   return sum;
@@ -342,41 +337,18 @@ double streamer::doLocalPZandEnergy(int startIndex, int endIndex, int LEDIndex, 
 
 /**************************************************************/
 
-// double streamer::doPolezero2Poles(int startIndex, int endIndex, double sum, double tau, double tau2, int first) {
-
-//   for (int i=startIndex; i<endIndex; i++) {
-//     if (i < (2*EM+EK) && first == 1) { pzBuf[i] = 0.; }
-//     else if (i == (2*EM+EK) && first == 1) { pzBuf[i] = 0.; }
-//     else if ((i > (2*EM+EK) && first == 1) || (first != 1)) {
-//       if (sum>0) {
-// 	sum += (double)trapBuf[i];
-// 	pzBuf[i] = trapBuf[i-1] + sum*(1/tau)*(1/tau2);
-//       } else {
-// 	sum += (double)trapBuf[i];
-// 	pzBuf[i] = trapBuf[i-1] + sum*(1/tau)*(1/tau2);
-//       }
-//     }
-//     //printf("%d %d %f %f\n", i, trapBuf[i], sum, pzBuf[i]);
-//   }
-
-//   return sum;
-  
-// }
-
-/**************************************************************/
-
 void streamer::doBaselineRestorationCC(int startIndex, int endIndex, int startTS, int first) {
 
   int iLED =0;
-  int BLRinhibit = 0, BLRinhibitP = 0;
+  int BLRinhibit = 0;
   int countdown = 0;
   int numRetriggers = 0;
   int j=0;
   long int ledTS = 0;
 
-  double div = pow(2., DV);
-    
-  for (int i=startIndex; i<endIndex; i++) {
+  double div = 1/pow(2., DV);
+
+  for (int i=startIndex+1; i<endIndex; i++) {
 
     if (ledOUT.size() > 0) {
       if (i > ledOUT[iLED]-startTS && i == startIndex) { iLED++; }
@@ -411,7 +383,7 @@ void streamer::doBaselineRestorationCC(int startIndex, int endIndex, int startTS
 	}
       }
     }	
-      
+
     subBL1[i] = (pzBuf[i-1]-BL1[i-1])*div;
     subBL2[i] = (BL1[i-1]-BL2[i-1])*div;
     
@@ -424,7 +396,6 @@ void streamer::doBaselineRestorationCC(int startIndex, int endIndex, int startTS
     }
   
     pzBLBuf[i] = pzBuf[i] - BL2[i];
-    
   }
 
 }
@@ -441,7 +412,7 @@ void streamer::doBaselineRestorationM2(int startIndex, int endIndex, int startTS
   int countdown = 0;
   int numRetriggers = 0;
 
-  double div = pow(2., DV);
+  double div = 1/pow(2., DV);
   
   for (int i=startIndex; i<endIndex; i++) {
 

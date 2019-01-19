@@ -140,57 +140,56 @@ int main(int argc, char **argv) {
 
     /* Making this work over boundaries is going to take some thinking... */
 
-    data->doBaselineRestorationCC(indexStart, curr, startTS, numberOfReads);
-    //data->doBaselineRestorationM2(indexStart, curr, startTS, numberOfReads);
-
-    if(data->useBLR) {
-      if (!data->usePO) { energies = data->doEnergyPeakFind(data->pzBLBuf, 0, curr-overlapWidth, startTS, &pileUp); }
-      else if (data->usePO) {	energies = data->doEnergyFixedPickOff(data->pzBLBuf, indexStart-overlapWidth/2, curr, startTS, &pileUp); }
-    } else {
-      if (!data->usePO) { energies = data->doEnergyPeakFind(data->pzBuf, indexStart, curr, startTS, &pileUp); }
-      else if (data->usePO) { energies = data->doEnergyFixedPickOff(data->pzBuf, indexStart-overlapWidth/2, curr, startTS, &pileUp); }
+    if (data->useBLR) {
+      //data->doBaselineRestorationCC(indexStart, curr, startTS, numberOfReads);
+      data->doBaselineRestorationM2(indexStart, curr, startTS, numberOfReads);
     }
 
+    if(data->useBLR) {
+      if (!data->usePO) { energies = data->doEnergyPeakFind(data->pzBLBuf, indexStart, curr, startTS, &pileUp); }
+      else if (data->usePO) {	energies = data->doEnergyFixedPickOff(data->pzBLBuf, indexStart, curr, startTS, &pileUp); }
+    } else {
+      if (!data->usePO) { energies = data->doEnergyPeakFind(data->pzBuf, indexStart, curr, startTS, &pileUp); }
+      else if (data->usePO) { energies = data->doEnergyFixedPickOff(data->pzBuf, indexStart, curr, startTS, &pileUp); }
+    }
+    
     /* Write out the events in this chunk of data... */
     for (i=0; i<data->ledOUT.size(); i++) {
       // if (data->ledOUT[i] <= startTS + curr - overlapWidth) {
-	g3ch.Clear();
-	g3ch.timestamp = data->ledOUT[i];
-	if (i < energies.size()) {
-	  g3ch.eRaw = energies[i];
-	  if (energies[i+1] == 1) { g3ch.hdr7 = 0x8000; } else { g3ch.hdr7 = 0; } /* Pile up flag... */
-	}
-	
-	g3ch.prevE1 = energies[i-2];
-	g3ch.prevE2 = energies[i-4];
-	g3ch.deltaT1 = data->ledOUT[i]-data->ledOUT[i-1];
-	g3ch.deltaT2 = data->ledOUT[i-1]-data->ledOUT[i-2];
-	
-	g3ch.hdr0 = numberOfReads;
-	g3ch.CFDtimestamp = data->ledOUT[i] - startTS;
-
-	/* Pull out the WF */
-	g3ch.wf.raw.clear();
-	for (int j=-200; j<300; j++) {
-	  g3ch.wf.raw.push_back(data->wf[data->ledOUT[i]-startTS+j]);
-	  if (j >= -10 && j<=-4) {
-	    g3ch.baseline += (data->wf[data->ledOUT[i] - startTS+j]);
-	  }
-	}
-	g3ch.baseline /= 6.;
-	
-	g3xtal.chn.clear();
-	g3xtal.chn.push_back(g3ch);
-	g3xtal.crystalNum = 1;
-	g3xtal.quadNum = 1;
-	g3xtal.module = 1;
-	g3xtal.traceLength = g3ch.wf.raw.size();
-	
-	g3->Reset();
-	g3->xtals.push_back(g3xtal);
-	teb->Fill();
-	//}
-	//data->ledOUT.erase(data->ledOUT.begin(), data->ledOUT.begin()+1);
+      g3ch.Clear();
+      g3ch.timestamp = data->ledOUT[i];
+      if (i < energies.size()) {
+	g3ch.eRaw = energies[i];
+	if (energies[i+1] == 1) { g3ch.hdr7 = 0x8000; } else { g3ch.hdr7 = 0; } /* Pile up flag... */
+      }
+      
+      g3ch.prevE1 = energies[i-2];
+      g3ch.prevE2 = energies[i-4];
+      g3ch.deltaT1 = data->ledOUT[i]-data->ledOUT[i-1];
+      g3ch.deltaT2 = data->ledOUT[i-1]-data->ledOUT[i-2];
+      
+      g3ch.hdr0 = numberOfReads;
+      g3ch.CFDtimestamp = data->ledOUT[i] - startTS;
+      
+      /* Pull out the WF */
+      g3ch.wf.raw.clear();
+      for (int j=-200; j<300; j++) {
+	g3ch.wf.raw.push_back(data->wf[data->ledOUT[i]-startTS+j]);
+      }
+      g3ch.baseline = data->baseline(data->ledOUT[i]-startTS-25);
+      
+      g3xtal.chn.clear();
+      g3xtal.chn.push_back(g3ch);
+      g3xtal.crystalNum = 1;
+      g3xtal.quadNum = 1;
+      g3xtal.module = 1;
+      g3xtal.traceLength = g3ch.wf.raw.size();
+      
+      g3->Reset();
+      g3->xtals.push_back(g3xtal);
+      teb->Fill();
+      //}
+      //data->ledOUT.erase(data->ledOUT.begin(), data->ledOUT.begin()+1);
     }
 
     energies.clear();
@@ -203,7 +202,7 @@ int main(int argc, char **argv) {
       if (curr <= 0) { break; }
     }
 
-    if (gotsignal) { numberOfReads == nReads; }
+    if (gotsignal == 1) { numberOfReads == nReads; printf("Exiting gracefully.\n");}
   }
 
   printf("LED crossings observed = %d\n", ledCrossing);

@@ -1,7 +1,7 @@
 ################
 # First up, decay constant for PZ -- units of clock ticks (10ns)
 ################
-Tau 5000.
+Tau 5020.
 
 ################
 # Now LED filter information
@@ -12,7 +12,7 @@ LED threshold 50
 ################
 # Energy trapezoid information
 ################
-Integration time 100
+Integration time 400
 Gap (flat-top) time 50
 
 ################
