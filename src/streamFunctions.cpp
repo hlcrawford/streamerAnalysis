@@ -111,34 +111,34 @@ int streamer::getSettings(TString setFile) {
       nret = sscanf(str, "%s %f", str1, &f1);
       setTau(f1);
     } else if ((p = strstr(str, "Integration time")) != NULL) {
-      nret = sscanf(str, "%s %d", str1, &d1);
+      nret = sscanf(str, "%s %s %d", str1, str1, &d1);
       setIntTime(d1);
     } else if ((p = strstr(str, "Gap (flat-top) time")) != NULL) {
-      nret = sscanf(str, "%s %d", str1, &d1);
+      nret = sscanf(str, "%s %s %s %d", str1, str1, str1, &d1);
       setGapTime(d1);
     } else if ((p = strstr(str, "LED integration time")) != NULL) {
-      nret = sscanf(str, "%s %d", str1, &d1);
+      nret = sscanf(str, "%s %s %s %d", str1, str1, str1, &d1);
       setLEDIntTime(d1);
     } else if ((p = strstr(str, "LED threshold")) != NULL) {
-      nret = sscanf(str, "%s %d", str1, &d1);
+      nret = sscanf(str, "%s %s %d", str1, str1, &d1);
       setLEDThresh(d1);
     } else if ((p = strstr(str, "BLR time constant")) != NULL) {
-      nret = sscanf(str, "%s %d", str1, &d1);
+      nret = sscanf(str, "%s %s %s %d", str1, str1, str1, &d1);
       setBLRValue(d1);
     } else if ((p = strstr(str, "BLR inhibit length")) != NULL) {
-      nret = sscanf(str, "%s %d", str1, &d1);
+      nret = sscanf(str, "%s %s %s %d", str1, str1, str1, &d1);
       setBLRInhibit(d1);
     } else if ((p = strstr(str, "BLR retrigger")) != NULL) {
-      nret = sscanf(str, "%s %d", str1, &d1);
+      nret = sscanf(str, "%s %s %d", str1, str1, &d1);
       setBLRTrigger(d1);
     } else if ((p = strstr(str, "Do BLR?")) != NULL) {
-      nret = sscanf(str, "%s %d", str1, &d1);
+      nret = sscanf(str, "%s %s %d", str1, str1, &d1);
       setBLR(d1);
     } else if ((p = strstr(str, "Do fixed time pickoff for energy?")) != NULL) {
-      nret = sscanf(str, "%s %d", str1, &d1);
+      nret = sscanf(str, "%s %s %s %s %s %s %d", str1, str1, str1, str1, str1, str1, &d1);
       setEnergyPO(d1);
     } else if ((p = strstr(str, "Fixed pickoff time")) != NULL) {
-      nret = sscanf(str, "%s %d", str1, &d1);
+      nret = sscanf(str, "%s %s %s %d", str1, str1, str1, &d1);
       setPOTime(d1);
     } else {
       /* Unknown command */
@@ -159,6 +159,30 @@ int streamer::getSettings(TString setFile) {
 
 }
 
+/**************************************************************/
+
+void streamer::reportSettings() {
+  cout << DCYAN;
+  printf(" Analysis settings:\n");
+  printf("   Tau (in 10ns clicks) = %0.2f\n", getTau());
+  printf("   LED integration time = %d\n", getLEDIntTime());
+  printf("   LED threshold = %d\n", getLEDThresh());
+  printf("   Trapezoid = %d / %d / %d\n", getIntTime(), getGapTime(), getIntTime());
+  printf("   Fixed pickoff = "); 
+  if (getEnergyPO()) { printf("Yes, at %d\n", getPOTime()); }
+  if (!getEnergyPO()) { printf("No.\n"); }
+  printf("   Baseline restoration = ");
+  if (!getBLR()) { printf("No.\n"); }
+  if (getBLR()) { 
+    printf("Yes...\n");
+    printf("     Time constant = %d\n", getBLRValue());
+    printf("     Inhibit length = %d\n", getBLRInhibit());
+    printf("     Retrigger = %d\n", getBLRTrigger());
+  }
+  printf("\n\n");
+  cout << RESET_COLOR;  fflush(stdout);
+  
+}
 
 /**************************************************************/
 

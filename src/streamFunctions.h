@@ -47,6 +47,7 @@ class streamer : public TObject {
   int Initialize(TString inputFileName, TString setFileName);
   int Reset(int overlap);
   int getSettings(TString setFile);
+  void reportSettings();
   int calculateLEDlevel(int index, int thresh);
   void doLEDfilter(int startIndex, int endIndex, int first);
   int getLEDcrossings(int startIndex, int endIndex, int first);

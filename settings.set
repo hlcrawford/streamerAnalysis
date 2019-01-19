@@ -12,7 +12,7 @@ LED threshold 50
 ################
 # Energy trapezoid information
 ################
-Integration time 400
+Integration time 100
 Gap (flat-top) time 50
 
 ################

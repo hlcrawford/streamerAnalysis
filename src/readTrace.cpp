@@ -84,6 +84,7 @@ int main(int argc, char **argv) {
   
   streamer *data = new streamer(invert);
   curr = data->Initialize(inputName, fileNameSet);
+  data->reportSettings();
 
   int overlapWidth = 2*(2*data->EM + data->EK);
   curr -= overlapWidth/2;
@@ -113,7 +114,6 @@ int main(int argc, char **argv) {
   int indexStart = 0;
 
   for (int numberOfReads = 1; numberOfReads<=nReads; numberOfReads++) {
-
     if (numberOfReads == 1) { indexStart = 0; }
     else { indexStart = overlapWidth/2; }
 
@@ -203,6 +203,7 @@ int main(int argc, char **argv) {
       if (curr <= 0) { break; }
     }
 
+    if (gotsignal) { numberOfReads == nReads; }
   }
 
   printf("LED crossings observed = %d\n", ledCrossing);
