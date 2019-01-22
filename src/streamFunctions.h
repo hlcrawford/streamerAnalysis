@@ -55,7 +55,7 @@ class streamer : public TObject {
   void doTrapezoid(int startIndex, int endIndex, int startTS, int first);
   double doPolezeroBasic(int startIndex, int endIndex, double sum, int first);
   double doLocalPZandEnergy(int startIndex, int endIndex, int LEDIndex, double tau);
-  void doBaselineRestorationCC(int startIndex, int endIndex, int startTS, int first);
+  int doBaselineRestorationCC(int startIndex, int endIndex, int startTS, int first, int countdown);
   void doBaselineRestorationM2(int startIndex, int endIndex, int startTS, int first);
   std::vector<double> doEnergyPeakFind(double *in, int startIndex, int endIndex, int startTS, int *pileUp);
   std::vector<double> doEnergyFixedPickOff(double *in, int startIndex, int endIndex, int startTS, int *pileUp);
@@ -64,7 +64,7 @@ class streamer : public TObject {
   void setLEDThresh(double iLEDThreshold) { LEDThreshold = iLEDThreshold; }
   void setIntTime(int iEM) { EM = iEM; }
   void setGapTime(int iEK) { EK = iEK; }
-  void setLEDIntTime(int iEK) { LEDK = iEK; }
+  void setLEDGapTime(int iEK) { LEDK = iEK; }
   void setBLRValue(int iDV) { DV = iDV; }
   void setBLRInhibit(int iBLRi) { BLRinhibitLength = iBLRi; }
   void setBLRTrigger(int iBLRT) { BLRretrigger = iBLRT; }
@@ -77,7 +77,7 @@ class streamer : public TObject {
   int getLEDThresh() { return LEDThreshold; }
   int getIntTime() { return EM; }
   int getGapTime() { return EK; }
-  int getLEDIntTime() { return LEDK; }
+  int getLEDGapTime() { return LEDK; }
   int getBLRValue() { return DV; }
   int getBLRInhibit() { return BLRinhibitLength; }
   int getBLRTrigger() { return BLRretrigger; }

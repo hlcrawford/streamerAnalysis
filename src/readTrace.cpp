@@ -38,6 +38,7 @@ int main(int argc, char **argv) {
 
   int withBLR = 1;
   int invert = 0;
+  int BLRcountdown = 0;
 
   std::vector<double> energies;
     
@@ -87,7 +88,6 @@ int main(int argc, char **argv) {
   data->reportSettings();
 
   int overlapWidth = 2*(2*data->EM + data->EK);
-  curr -= overlapWidth/2;
  
   /* Initialize ROOT output stuff */
   g3OUT *g3 = new g3OUT();
@@ -114,8 +114,8 @@ int main(int argc, char **argv) {
   int indexStart = 0;
 
   for (int numberOfReads = 1; numberOfReads<=nReads; numberOfReads++) {
-    if (numberOfReads == 1) { indexStart = 0; }
-    else { indexStart = overlapWidth/2; }
+    if (numberOfReads == 1) { indexStart = 0; curr -= overlapWidth/2; }
+    else { indexStart = overlapWidth/2; curr += overlapWidth/2; }
 
     /* First basic filtering ... 
           for first read, we go from [0] to [END - 1/2 of overlap]
@@ -141,8 +141,9 @@ int main(int argc, char **argv) {
     /* Making this work over boundaries is going to take some thinking... */
 
     if (data->useBLR) {
+      BLRcountdown=data->doBaselineRestorationCC(indexStart, curr, startTS, numberOfReads, BLRcountdown);
       //data->doBaselineRestorationCC(indexStart, curr, startTS, numberOfReads);
-      data->doBaselineRestorationM2(indexStart, curr, startTS, numberOfReads);
+      //data->doBaselineRestorationM2(indexStart, curr, startTS, numberOfReads);
     }
 
     if(data->useBLR) {
@@ -158,15 +159,27 @@ int main(int argc, char **argv) {
       // if (data->ledOUT[i] <= startTS + curr - overlapWidth) {
       g3ch.Clear();
       g3ch.timestamp = data->ledOUT[i];
-      if (i < energies.size()) {
-	g3ch.eRaw = energies[i];
-	if (energies[i+1] == 1) { g3ch.hdr7 = 0x8000; } else { g3ch.hdr7 = 0; } /* Pile up flag... */
+      if (i*2 < energies.size()) {
+	g3ch.eRaw = energies[i*2];
+	if (energies[i*2+1] == 1) { g3ch.hdr7 = 0x8000; } else { g3ch.hdr7 = 0; } /* Pile up flag... */
+	if (i >= 2) {	  
+	  g3ch.prevE1 = energies[i*2-2];
+	  g3ch.prevE2 = energies[i*2-4];
+	} else if (i == 1) {	  
+	  g3ch.prevE1 = energies[i*2-2];
+	  g3ch.prevE2 = -1;
+	}
+      } else {
+ 	g3ch.eRaw = -1;
+	g3ch.prevE1 = -1;
+	g3ch.prevE2 = -1;
       }
-      
-      g3ch.prevE1 = energies[i-2];
-      g3ch.prevE2 = energies[i-4];
-      g3ch.deltaT1 = data->ledOUT[i]-data->ledOUT[i-1];
-      g3ch.deltaT2 = data->ledOUT[i-1]-data->ledOUT[i-2];
+      if (i >= 2) {	  
+	g3ch.deltaT1 = data->ledOUT[i]-data->ledOUT[i-1];
+	g3ch.deltaT2 = data->ledOUT[i-1]-data->ledOUT[i-2];
+      } else if (i == 1) {	  
+	g3ch.deltaT1 = data->ledOUT[i]-data->ledOUT[i-1];
+      }
       
       g3ch.hdr0 = numberOfReads;
       g3ch.CFDtimestamp = data->ledOUT[i] - startTS;

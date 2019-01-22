@@ -1,25 +1,25 @@
 ################
 # First up, decay constant for PZ -- units of clock ticks (10ns)
 ################
-Tau 5020.
+Tau 5200.
 
 ################
 # Now LED filter information
 ################
-LED integration time 5
-LED threshold 50
+LED gap time 50
+LED threshold 45
 
 ################
 # Energy trapezoid information
 ################
 Integration time 400
-Gap (flat-top) time 50
+Gap (flat-top) time 100
 
 ################
 # Fixed time pickoff for energies?
 ################
-Do fixed time pickoff for energy? 0
-Fixed pickoff time 0
+Do fixed time pickoff for energy? 1
+Fixed pickoff time 470
 
 ################
 # Baseline restoration stuff
@@ -28,6 +28,6 @@ Fixed pickoff time 0
 # Retrigger should be positive integer, or for infinite retriggers, -1
 ################
 Do BLR? 1
-BLR time constant 8
+BLR time constant 10
 BLR inhibit length 1800
-BLR retrigger -1
+BLR retrigger 999

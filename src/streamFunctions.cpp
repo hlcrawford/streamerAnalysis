@@ -116,9 +116,9 @@ int streamer::getSettings(TString setFile) {
     } else if ((p = strstr(str, "Gap (flat-top) time")) != NULL) {
       nret = sscanf(str, "%s %s %s %d", str1, str1, str1, &d1);
       setGapTime(d1);
-    } else if ((p = strstr(str, "LED integration time")) != NULL) {
+    } else if ((p = strstr(str, "LED gap time")) != NULL) {
       nret = sscanf(str, "%s %s %s %d", str1, str1, str1, &d1);
-      setLEDIntTime(d1);
+      setLEDGapTime(d1);
     } else if ((p = strstr(str, "LED threshold")) != NULL) {
       nret = sscanf(str, "%s %s %d", str1, str1, &d1);
       setLEDThresh(d1);
@@ -165,7 +165,7 @@ void streamer::reportSettings() {
   cout << DCYAN;
   printf(" Analysis settings:\n");
   printf("   Tau (in 10ns clicks) = %0.2f\n", getTau());
-  printf("   LED integration time = %d\n", getLEDIntTime());
+  printf("   LED gap time = %d\n", getLEDGapTime());
   printf("   LED threshold = %d\n", getLEDThresh());
   printf("   Trapezoid = %d / %d / %d\n", getIntTime(), getGapTime(), getIntTime());
   printf("   Fixed pickoff = "); 
@@ -216,9 +216,12 @@ void streamer::doLEDfilter(int startIndex, int endIndex, int startTS) {
 /**************************************************************/
 
 int streamer::getLEDcrossings(int startIndex, int endIndex, int startTS) {
+  int noiseCountdown = 0;
   for (int i=startIndex; i<endIndex; i++) {
-    if ((ledBuf[i] >= LEDThreshold) && (ledBuf[i-1] < LEDThreshold)) {
+    if (noiseCountdown>0) {noiseCountdown--;}
+    if ((ledBuf[i] >= LEDThreshold) && (ledBuf[i-1] < LEDThreshold) && (noiseCountdown==0)) {
       ledOUT.push_back(i+startTS);
+      noiseCountdown = 100;
     }
   }
   return ledOUT.size();
@@ -250,7 +253,7 @@ void streamer::doTrapezoid(int startIndex, int endIndex, int startTS, int first)
       trapBuf[i] = trapBuf[i-1] + scratch;
     }
   }
-  
+    
   /* This shouldn't be allowed, but I'm going to give a shot.
      Find the DC offset and just remove it.  */
   long long int values = 0;
@@ -279,7 +282,7 @@ void streamer::doTrapezoid(int startIndex, int endIndex, int startTS, int first)
       trapBuf[i] -= offset;
     }
   }
-
+  
 }
 
 /**************************************************************/
@@ -293,7 +296,7 @@ double streamer::doPolezeroBasic(int startIndex, int endIndex, double sum, int f
     else if (i == (2*EM+EK) && first == 1) { pzBuf[i] = 0.; }
     else if ((i > (2*EM+EK) && first == 1) || (first != 1)) {
       sum += (double)trapBuf[i];
-      pzBuf[i] = trapBuf[i-1] + sum*(1/tau);
+      pzBuf[i] = trapBuf[i] + sum*(1/tau);
     }
   }
 
@@ -337,11 +340,11 @@ double streamer::doLocalPZandEnergy(int startIndex, int endIndex, int LEDIndex, 
 
 /**************************************************************/
 
-void streamer::doBaselineRestorationCC(int startIndex, int endIndex, int startTS, int first) {
+int streamer::doBaselineRestorationCC(int startIndex, int endIndex, int startTS, int first, int countdown) {
 
   int iLED =0;
   int BLRinhibit = 0;
-  int countdown = 0;
+  //  int countdown = 0;
   int numRetriggers = 0;
   int j=0;
   long int ledTS = 0;
@@ -354,7 +357,7 @@ void streamer::doBaselineRestorationCC(int startIndex, int endIndex, int startTS
       if (i > ledOUT[iLED]-startTS && i == startIndex) { iLED++; }
       
       /* We see an LED -- inhibit for duration inhibitLength */
-      if (i == (ledOUT[iLED]-startTS)) {
+      if (i == (ledOUT[iLED]-startTS-100)) {
 	/* Check if this is a re-trigger */
 	if (countdown !=0) {
 	  numRetriggers++;
@@ -398,6 +401,7 @@ void streamer::doBaselineRestorationCC(int startIndex, int endIndex, int startTS
     pzBLBuf[i] = pzBuf[i] - BL2[i];
   }
 
+  return countdown;
 }
 
 /**************************************************************/
@@ -488,6 +492,7 @@ std::vector<double> streamer::doEnergyPeakFind(double *in, int startIndex, int e
       }
       if (ledCrossed && in[i] > peak && (i-ledTS) < (EM+EK)) { peak = in[i]; }
       if (ledCrossed && (i-ledTS) >= EM+EK) {
+	/*
 	if (!piledUp) {
 	  energies.push_back((peak - in[ledTS-10])/32.);
 	  energies.push_back(0);
@@ -495,13 +500,20 @@ std::vector<double> streamer::doEnergyPeakFind(double *in, int startIndex, int e
 	  energies.push_back((peak - in[ledTS-10])/32.);
 	  energies.push_back(1);
 	}
+	*/
+	energies.push_back(peak/32.);
+	energies.push_back(piledUp);
 	ledCrossed = 0;  piledUp = 0;
 	if (in[i] > 0) { peak = 0; }
 	else if (in[i] < 0) { peak = std::numeric_limits<double>::max(); }
       }
     }
   }
-  
+  /*
+  printf("\n");
+  printf("ledOUT.size() is %d , double is %d\n",ledOUT.size(),ledOUT.size()*2);
+  printf("energies.size() is %d \n",energies.size());
+  */
   return energies;
 }
 
