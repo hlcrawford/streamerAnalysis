@@ -47,6 +47,8 @@ int streamer::Initialize(TString inputFileName, TString setFileName) {
   return num;
 }
 
+/**************************************************************/
+
 int streamer::Reset(int overlap) {
   for (int i=0; i<overlap; i++) {
     wf[i] = wf[READSIZE-overlap+i];
@@ -207,7 +209,7 @@ void streamer::doLEDfilter(int startIndex, int endIndex, int startTS) {
 
   for (int i=startIndex; i<endIndex; i++) {
     /* LED-like filter */
-    if ( (i+startTS) > 10 ) {
+    if ( (i+startTS) > (LEDK + 5)) {
       ledBuf[i] = calculateLEDlevel(i, LEDThreshold);
     } else { ledBuf[i] = 0; }
   }
@@ -218,7 +220,7 @@ void streamer::doLEDfilter(int startIndex, int endIndex, int startTS) {
 int streamer::getLEDcrossings(int startIndex, int endIndex, int startTS) {
   int noiseCountdown = 0;
   for (int i=startIndex; i<endIndex; i++) {
-    if (noiseCountdown>0) {noiseCountdown--;}
+    if (noiseCountdown>0) { noiseCountdown--; }
     if ((ledBuf[i] >= LEDThreshold) && (ledBuf[i-1] < LEDThreshold) && (noiseCountdown==0)) {
       ledOUT.push_back(i+startTS);
       noiseCountdown = 100;
@@ -327,13 +329,11 @@ double streamer::doLocalPZandEnergy(int startIndex, int endIndex, int LEDIndex, 
       tempBuf[i] = wf[i-1] - BL + sumL*(1/tau);
     }
   }
-      
   double pre = 0.0, post = 0.0;
   for (int i=0; i<EM; i++) {
     pre += tempBuf[i+startIndex];
     post += tempBuf[i+LEDIndex+100];
   }
-      
   return (post-pre)/32.;
   
 }
@@ -479,69 +479,67 @@ void streamer::doBaselineRestorationM2(int startIndex, int endIndex, int startTS
 std::vector<double> streamer::doEnergyPeakFind(double *in, int startIndex, int endIndex, int startTS, int *pileUp) {
 
   std::vector<double> energies;
+  int piledUp = 0;
+  double peak = 0;
 
-  if (ledOUT.size() > 0) {
-    int j=0, ledCrossed = 0, piledUp = 0;
-    double peak = 0;
-    long int ledTS = 0;
-    
-    for (int i=startIndex; i<endIndex; i++) {
-      if (i == (ledOUT[j]-startTS)) {
-	if (ledCrossed) { (*pileUp)++; piledUp = 1; }
-	ledTS = (ledOUT[j]-startTS);  ledCrossed = 1;  j++;
-      }
-      if (ledCrossed && in[i] > peak && (i-ledTS) < (EM+EK)) { peak = in[i]; }
-      if (ledCrossed && (i-ledTS) >= EM+EK) {
-	/*
-	if (!piledUp) {
-	  energies.push_back((peak - in[ledTS-10])/32.);
-	  energies.push_back(0);
-	} else {
-	  energies.push_back((peak - in[ledTS-10])/32.);
-	  energies.push_back(1);
+  for (int i=0; i<ledOUT.size(); i++) {
+    /* Check for pileup condition... */
+    if (i!=0 && i!=ledOUT.size()-1) {
+      if ( ((ledOUT[i]-ledOUT[i-1])< EM+EK) ||
+	   ((ledOUT[i+1]-ledOUT[i])< EM+EK) ) {
+	(*pileUp)++; piledUp = 1;
+      } else { piledUp = 0; }
+    } else if (i==0) { /* Edge case of first LED... */
+      if ( ((ledOUT[i+1]-ledOUT[i])< EM+EK) ) {
+	(*pileUp)++; piledUp = 1;
+      } else { piledUp = 0; }
+    } else if (i==ledOUT.size()-1) { /* Edge case of last LED... */
+      if ( ((ledOUT[i]-ledOUT[i-1])< EM+EK) ) {
+	(*pileUp)++; piledUp = 1;
+      } else { piledUp = 0; }
+    }
+    peak = 0;
+    for (int j=0; j<EM+EK; j++) {
+      if (ledOUT[i]-startTS+j < READSIZE) {
+	if (in[ledOUT[i]-startTS+j] > peak) {
+	  peak = in[ledOUT[i]-startTS+j];
 	}
-	*/
-	energies.push_back(peak/32.);
-	energies.push_back(piledUp);
-	ledCrossed = 0;  piledUp = 0;
-	if (in[i] > 0) { peak = 0; }
-	else if (in[i] < 0) { peak = std::numeric_limits<double>::max(); }
       }
     }
+    energies.push_back(peak/32.);
+    energies.push_back(piledUp);
   }
-  /*
-  printf("\n");
-  printf("ledOUT.size() is %d , double is %d\n",ledOUT.size(),ledOUT.size()*2);
-  printf("energies.size() is %d \n",energies.size());
-  */
+
   return energies;
 }
 
 std::vector<double> streamer::doEnergyFixedPickOff(double *in, int startIndex, int endIndex, int startTS, int *pileUp) {
 
   std::vector<double> energies;
-  if (ledOUT.size() > 0) {
-    int j=0;
-    int piledUp = 0;
-
-    for (int i=startIndex; i<endIndex; i++) {
-      if (i == (ledOUT[j]-startTS) && j < ledOUT.size()-1) {
-	/* Check for pileup condition... */	
-	if ( ((ledOUT[j]-ledOUT[j-1])< EM+EK) ||
-	     ((ledOUT[j+1]-ledOUT[j])< EM+EK) ) {
-	  (*pileUp)++; piledUp = 1;
-	  energies.push_back((in[ledOUT[j]-startTS + POtime])/32.);
-	  energies.push_back(1);
-	} else { piledUp = 0; }
-	if (!piledUp) {
-	  energies.push_back((in[ledOUT[j]-startTS + POtime])/32.);
-	  energies.push_back(0);
-	}
-	j++;
-      }
+  int piledUp = 0;
+  
+  for (int i=0; i<ledOUT.size(); i++) {
+    /* Check for pileup condition... */
+    if (i!=0 && i!=ledOUT.size()-1) {
+      if ( ((ledOUT[i]-ledOUT[i-1])< EM+EK) ||
+	   ((ledOUT[i+1]-ledOUT[i])< EM+EK) ) {
+	(*pileUp)++; piledUp = 1;
+      } else { piledUp = 0; }
+    } else if (i==0) { /* Edge case of first LED... */
+      if ( ((ledOUT[i+1]-ledOUT[i])< EM+EK) ) {
+	(*pileUp)++; piledUp = 1;
+      } else { piledUp = 0; }
+    } else if (i==ledOUT.size()-1) { /* Edge case of last LED... */
+      if ( ((ledOUT[i]-ledOUT[i-1])< EM+EK) ) {
+	(*pileUp)++; piledUp = 1;
+      } else { piledUp = 0; }
     }
+    /* Push back the energies and the pileup, in that order */
+    if ((ledOUT[i]-startTS+POtime) < READSIZE) {
+      energies.push_back((in[ledOUT[i]-startTS + POtime])/32.);
+    } else { energies.push_back(-1); }
+    energies.push_back(piledUp);
   }
-
+  
   return energies;
-
 }

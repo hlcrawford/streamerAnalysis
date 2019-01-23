@@ -137,11 +137,9 @@ int main(int argc, char **argv) {
     
     printf("numberOfReads = %d, ledCrossing = %d\r", numberOfReads, ledCrossing);
     
-
     /* Making this work over boundaries is going to take some thinking... */
-
     if (data->useBLR) {
-      BLRcountdown=data->doBaselineRestorationCC(indexStart, curr, startTS, numberOfReads, BLRcountdown);
+      BLRcountdown = data->doBaselineRestorationCC(indexStart, curr, startTS, numberOfReads, BLRcountdown);
       //data->doBaselineRestorationCC(indexStart, curr, startTS, numberOfReads);
       //data->doBaselineRestorationM2(indexStart, curr, startTS, numberOfReads);
     }
@@ -156,7 +154,6 @@ int main(int argc, char **argv) {
     
     /* Write out the events in this chunk of data... */
     for (i=0; i<data->ledOUT.size(); i++) {
-      // if (data->ledOUT[i] <= startTS + curr - overlapWidth) {
       g3ch.Clear();
       g3ch.timestamp = data->ledOUT[i];
       if (i*2 < energies.size()) {
@@ -201,8 +198,6 @@ int main(int argc, char **argv) {
       g3->Reset();
       g3->xtals.push_back(g3xtal);
       teb->Fill();
-      //}
-      //data->ledOUT.erase(data->ledOUT.begin(), data->ledOUT.begin()+1);
     }
 
     energies.clear();
