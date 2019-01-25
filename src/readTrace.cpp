@@ -37,7 +37,6 @@ int main(int argc, char **argv) {
   long long int currTS = 0;
 
   int withBLR = 1;
-  int invert = 0;
   int BLRcountdown = 0;
 
   std::vector<double> energies;
@@ -83,7 +82,7 @@ int main(int argc, char **argv) {
     fileNameSet = "settings.set";
   }
   
-  streamer *data = new streamer(invert);
+  streamer *data = new streamer();
   curr = data->Initialize(inputName, fileNameSet);
   data->reportSettings();
 
@@ -123,6 +122,7 @@ int main(int argc, char **argv) {
     data->doLEDfilter(indexStart, curr, startTS);
     ledCrossings = data->getLEDcrossings(indexStart, curr, startTS);
     ledCrossing += ledCrossings;
+    printf("numberOfReads = %d, ledCrossing = %d\n", numberOfReads, ledCrossing);
 
     /* Filling histogram with locally optimized energy value... */
     for (i=0; i<data->ledOUT.size(); i++) {
@@ -134,8 +134,9 @@ int main(int argc, char **argv) {
 
     data->doTrapezoid(indexStart, curr, startTS, numberOfReads);    
     pzSum = data->doPolezeroBasic(indexStart, curr, pzSum, numberOfReads);
+    //pzSum = data->twoPolePolezero(indexStart, curr, pzSum, numberOfReads);
     
-    printf("numberOfReads = %d, ledCrossing = %d\r", numberOfReads, ledCrossing);
+
     
     /* Making this work over boundaries is going to take some thinking... */
     if (data->useBLR) {

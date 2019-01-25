@@ -42,7 +42,7 @@ class streamer : public TObject {
   int POtime;
   
  public:
-  streamer(int invert) { invertWF = invert; }
+  streamer() { ; }
   ~streamer() {;}
   int Initialize(TString inputFileName, TString setFileName);
   int Reset(int overlap);
@@ -54,6 +54,7 @@ class streamer : public TObject {
   double baseline(int index);
   void doTrapezoid(int startIndex, int endIndex, int startTS, int first);
   double doPolezeroBasic(int startIndex, int endIndex, double sum, int first);
+  double twoPolePolezero(int startIndex, int endIndex, double sum, int first);
   double doLocalPZandEnergy(int startIndex, int endIndex, int LEDIndex, double tau);
   int doBaselineRestorationCC(int startIndex, int endIndex, int startTS, int first, int countdown);
   void doBaselineRestorationM2(int startIndex, int endIndex, int startTS, int first);

@@ -19,6 +19,8 @@ int streamer::Initialize(TString inputFileName, TString setFileName) {
   useBLR = 0;  usePO = 0;
   POtime = 0;
 
+  invertWF = 0;
+
   getSettings(setFileName);
 
   if (tau == 0) { tau = 5000.; }
@@ -142,6 +144,9 @@ int streamer::getSettings(TString setFile) {
     } else if ((p = strstr(str, "Fixed pickoff time")) != NULL) {
       nret = sscanf(str, "%s %s %s %d", str1, str1, str1, &d1);
       setPOTime(d1);
+    } else if ((p = strstr(str, "Invert?")) != NULL) {
+      nret = sscanf(str, "%s %d", str1, &d1);
+      invertWF = d1;
     } else {
       /* Unknown command */
       cout << ALERTTEXT;
@@ -304,6 +309,22 @@ double streamer::doPolezeroBasic(int startIndex, int endIndex, double sum, int f
 
   return sum;
   
+}
+
+/**************************************************************/
+
+double streamer::twoPolePolezero(int startIndex, int endIndex, double sum, int first) {
+
+  for (int i=startIndex; i<endIndex; i++) {
+    if (i < (2*EM+EK) && first == 1) { pzBuf[i] = 0.; }
+    else if (i == (2*EM+EK) && first == 1) { pzBuf[i] = 0.; }
+    else if ((i > (2*EM+EK) && first == 1) || (first != 1)) {
+      sum += (double)trapBuf[i];
+      pzBuf[i] = trapBuf[i] + sum*0.9874*(1/tau) + sum*0.0126*(1/318.215);
+    }
+  }
+  return sum;
+
 }
 
 /**************************************************************/

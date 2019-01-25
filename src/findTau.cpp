@@ -31,7 +31,6 @@ int main(int argc, char **argv) {
   long long int currTS = 0;
 
   int twoPoles = 0;
-  int invert = 0;
 
   Double_t xVal[18000], yVal[18000];
   for (i=0; i<18000; i++) { xVal[i] = i; }
@@ -56,7 +55,7 @@ int main(int argc, char **argv) {
       fileNameSet = argv[i+1]; i++; i++;
       setFile = 1;
     } else if (strcmp(argv[i], "-n") == 0) {
-      sscanf(argv[i+1], "%d", &nReads);
+      sscanf(argv[i+1], "%d", &nReads); i++; i++;
     } else {
       cout << ALERTTEXT;
       printf("Error -- unrecognized input flag: <%s>\n", argv[i]);
@@ -75,7 +74,7 @@ int main(int argc, char **argv) {
     fileNameSet = "settings.set";
   }
   
-  streamer *data = new streamer(invert);
+  streamer *data = new streamer();
   curr = data->Initialize(inputName, fileNameSet);
   
   int overlapWidth = 2*(2*data->EM + data->EK);
@@ -89,6 +88,7 @@ int main(int argc, char **argv) {
   } else {
     tauValues = new TH2F("tau", "tau", 3000, 0, 30000, 3000, 0, 30000);
   }
+
   
   TF1 *expofit;
   if (!twoPoles) {
@@ -112,21 +112,6 @@ int main(int argc, char **argv) {
     data->doLEDfilter(indexStart, curr, startTS);
     ledCrossings = data->getLEDcrossings(indexStart, curr, startTS);
     ledCrossing += ledCrossings;
-
-    double averageTrigger = 0;
-    double stdDevTrigger = 0;
-    if (numberOfReads == 1) {
-      for (i=0; i<5000; i++) {
-	averageTrigger += (double)data->ledBuf[i];
-      } 
-      averageTrigger /= 5000.;
-      for (i=0; i<5000; i++) {
-	stdDevTrigger += (double)(data->ledBuf[i] - averageTrigger)*(double)(data->ledBuf[i]-averageTrigger);
-      }
-      stdDevTrigger /= 5000.;
-      stdDevTrigger = sqrt(stdDevTrigger);
-      printf("Noise level = %f +/- %f\n", averageTrigger, stdDevTrigger);
-    }	
 
     printf("numberOfReads = %d, ledCrossing = %d\r", numberOfReads, ledCrossing);
 
