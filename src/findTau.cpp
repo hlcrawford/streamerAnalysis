@@ -5,6 +5,7 @@
 
 #include "TFile.h"
 #include "TGraph.h"
+#include "TMath.h"
 #include "TH2.h"
 #include "TF1.h"
 
@@ -93,7 +94,8 @@ int main(int argc, char **argv) {
   TF1 *expofit;
   if (!twoPoles) {
     expofit = new TF1("expofit", "expo(0)");
-    expofit->SetParameters(100, -0.00015);
+    expofit->SetParameters(7, -0.00015);
+    expofit->SetParLimits(1, -0.05, -0.00005);
   } else {
     expofit = new TF1("expofit", "expo(0) + expo(2)");
     expofit->SetParameters(7, -0.0003, 2, -0.00005);
@@ -118,10 +120,11 @@ int main(int argc, char **argv) {
     for (i=0; i<data->ledOUT.size(); i++) {
       if ( (data->ledOUT[i+1] - data->ledOUT[i]) > 11000) {
 	for (int j=0; j<10000; j++) { yVal[j] = data->wf[data->ledOUT[i] - startTS + 200 + j] - data->wf[data->ledOUT[i] - startTS - 10]; }
+	if (!twoPoles) { expofit->SetParameters(TMath::Log(yVal[1]), -0.000196); }
 	gr = new TGraph(10000, xVal, yVal);
 	gr->Fit("expofit", "Q");
-	if (!twoPoles && expofit->GetChisquare()/expofit->GetNDF() > 300) {
-	  expofit->SetParameters(100, -0.00015);
+	if (!twoPoles && expofit->GetChisquare()/expofit->GetNDF() > 3000) {
+	  expofit->SetParameters(110, -0.000196);
 	  gr->Fit("expofit", "Q");
 	}
 	if (twoPoles && expofit->GetChisquare()/expofit->GetNDF() > 300) {

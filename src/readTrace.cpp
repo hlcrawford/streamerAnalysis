@@ -22,6 +22,9 @@ void breakhandler(int dummy) {
 
 int main(int argc, char **argv) {
 
+  gotsignal = 0;
+  signal(SIGINT, breakhandler);
+
   FILE *fout;
   int num, curr, newRead;
 
@@ -97,7 +100,7 @@ int main(int argc, char **argv) {
   TTree *teb = new TTree("teb", "Tree - with data stuff");
   teb->Branch("g3", "g3OUT", &(g3));
   
-  TH1F *rawEnergy = new TH1F("rawEnergy", "rawEnergy", 30000, 0, 300000);
+  TH1F *rawEnergy = new TH1F("rawEnergy", "rawEnergy", 6000, 0, 60000);
   
   /* Initialize file for chunk of waveform output */
   fout = fopen(OUTPUTFILE, "w");
@@ -127,7 +130,8 @@ int main(int argc, char **argv) {
     /* Filling histogram with locally optimized energy value... */
     for (i=0; i<data->ledOUT.size(); i++) {
       if (data->ledOUT[i]-startTS-3*(2*data->EM + data->EK) > 0 && data->ledOUT[i]-startTS+6*(2*data->EM + data->EK) < curr) {
-	rawEnergy->Fill(data->doLocalPZandEnergy(data->ledOUT[i]-startTS-3*(2*data->EM + data->EK), data->ledOUT[i]-startTS+6*(2*data->EM + data->EK), 
+	rawEnergy->Fill(data->doLocalPZandEnergy(data->ledOUT[i]-startTS-3*(2*data->EM + data->EK), 
+						 data->ledOUT[i]-startTS+6*(2*data->EM + data->EK), 
 						 data->ledOUT[i]-startTS, data->tau));
       }
     }
@@ -135,8 +139,6 @@ int main(int argc, char **argv) {
     data->doTrapezoid(indexStart, curr, startTS, numberOfReads);    
     pzSum = data->doPolezeroBasic(indexStart, curr, pzSum, numberOfReads);
     //pzSum = data->twoPolePolezero(indexStart, curr, pzSum, numberOfReads);
-    
-
     
     /* Making this work over boundaries is going to take some thinking... */
     if (data->useBLR) {
@@ -172,11 +174,23 @@ int main(int argc, char **argv) {
 	g3ch.prevE1 = -1;
 	g3ch.prevE2 = -1;
       }
-      if (i >= 2) {	  
-	g3ch.deltaT1 = data->ledOUT[i]-data->ledOUT[i-1];
-	g3ch.deltaT2 = data->ledOUT[i-1]-data->ledOUT[i-2];
-      } else if (i == 1) {	  
-	g3ch.deltaT1 = data->ledOUT[i]-data->ledOUT[i-1];
+      if (i >= 2) {
+	if (data->ledOUT[i]-data->ledOUT[i-1] >= 65536) { 
+	  g3ch.deltaT1 = 0;
+	} else {
+	  g3ch.deltaT1 = data->ledOUT[i]-data->ledOUT[i-1];
+	}
+	if (data->ledOUT[i-1]-data->ledOUT[i-2] >= 65536) { 
+	  g3ch.deltaT2 = 0;
+	} else {
+	  g3ch.deltaT2 = data->ledOUT[i-1]-data->ledOUT[i-2];
+	}
+      } else if (i == 1) {
+	if (data->ledOUT[i]-data->ledOUT[i-1] >= 65536) { 
+	  g3ch.deltaT1 = 0;
+	} else {
+	  g3ch.deltaT1 = data->ledOUT[i]-data->ledOUT[i-1];
+	}
       }
       
       g3ch.hdr0 = numberOfReads;
@@ -195,7 +209,7 @@ int main(int argc, char **argv) {
       g3xtal.quadNum = 1;
       g3xtal.module = 1;
       g3xtal.traceLength = g3ch.wf.raw.size();
-      
+          
       g3->Reset();
       g3->xtals.push_back(g3xtal);
       teb->Fill();

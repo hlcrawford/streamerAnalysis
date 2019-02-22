@@ -354,8 +354,11 @@ double streamer::doLocalPZandEnergy(int startIndex, int endIndex, int LEDIndex, 
   for (int i=0; i<EM; i++) {
     pre += tempBuf[i+startIndex];
     post += tempBuf[i+LEDIndex+100];
+    //pre += tempBuf[LEDIndex-2*EM-EK-100+i];
+    //post += tempBuf[LEDIndex-100-EM+i];
   }
-  return (post-pre)/32.;
+  // return (((post-pre)/(double)EM) + 1000.0);
+  return ((post-pre)/32.);
   
 }
 
