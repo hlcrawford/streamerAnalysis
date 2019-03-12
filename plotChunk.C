@@ -17,7 +17,13 @@ void plotChunk(Int_t option=0) {
     data->Draw("pzBL:index>>pzBLEplot", "", "l");
   } else if (option == 1) {
     TCanvas *m = new TCanvas();
-    data->Draw("trapE>>plot(40000,-10000,30000)", "", "");
+    data->Draw("trapE>>plot(40000,-1000,4000000)", "", "");
+  } else if (option == 2) {
+    TCanvas *m = new TCanvas();
+    data->Draw("trapE>>plot(40000,-50000,50000)", "", "");
+  } else if (option == 3) { 
+    TCanvas *m = new TCanvas();
+    data->Draw("wf>>plot(40000,-50000,0)", "", "");
   }
 
 }

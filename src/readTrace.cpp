@@ -43,6 +43,7 @@ int main(int argc, char **argv) {
   int BLRcountdown = 0;
 
   std::vector<double> energies;
+  std::vector<double> energiesPO;
     
   if (argc < 9) {
     fprintf(stderr, "Minimum usage: Analyze -fIn <input filename> -fOut <rootOutputName> -fSet <settingsName> -n <nReads> \n");
@@ -100,7 +101,7 @@ int main(int argc, char **argv) {
   TTree *teb = new TTree("teb", "Tree - with data stuff");
   teb->Branch("g3", "g3OUT", &(g3));
   
-  TH1F *rawEnergy = new TH1F("rawEnergy", "rawEnergy", 6000, 0, 60000);
+  TH1F *rawEnergy = new TH1F("rawEnergy", "rawEnergy", 300000, 0, 300000);
   
   /* Initialize file for chunk of waveform output */
   fout = fopen(OUTPUTFILE, "w");
@@ -127,40 +128,48 @@ int main(int argc, char **argv) {
     ledCrossing += ledCrossings;
     printf("numberOfReads = %d, ledCrossing = %d\n", numberOfReads, ledCrossing);
 
-    /* Filling histogram with locally optimized energy value... */
-    for (i=0; i<data->ledOUT.size(); i++) {
-      if (data->ledOUT[i]-startTS-3*(2*data->EM + data->EK) > 0 && data->ledOUT[i]-startTS+6*(2*data->EM + data->EK) < curr) {
-	rawEnergy->Fill(data->doLocalPZandEnergy(data->ledOUT[i]-startTS-3*(2*data->EM + data->EK), 
-						 data->ledOUT[i]-startTS+6*(2*data->EM + data->EK), 
-						 data->ledOUT[i]-startTS, data->tau));
-      }
-    }
-
-    data->doTrapezoid(indexStart, curr, startTS, numberOfReads);    
-    pzSum = data->doPolezeroBasic(indexStart, curr, pzSum, numberOfReads);
-    //pzSum = data->twoPolePolezero(indexStart, curr, pzSum, numberOfReads);
-    
-    /* Making this work over boundaries is going to take some thinking... */
-    if (data->useBLR) {
-      BLRcountdown = data->doBaselineRestorationCC(indexStart, curr, startTS, numberOfReads, BLRcountdown);
-      //data->doBaselineRestorationCC(indexStart, curr, startTS, numberOfReads);
-      //data->doBaselineRestorationM2(indexStart, curr, startTS, numberOfReads);
-    }
-
-    if(data->useBLR) {
-      if (!data->usePO) { energies = data->doEnergyPeakFind(data->pzBLBuf, indexStart, curr, startTS, &pileUp); }
-      else if (data->usePO) {	energies = data->doEnergyFixedPickOff(data->pzBLBuf, indexStart, curr, startTS, &pileUp); }
+    if (0) {
+      //energies = data->doPeakSensing(indexStart, curr, startTS, &pileUp);
+      energies = data->doPeakIntegrate(indexStart, curr, startTS, &pileUp);
     } else {
-      if (!data->usePO) { energies = data->doEnergyPeakFind(data->pzBuf, indexStart, curr, startTS, &pileUp); }
-      else if (data->usePO) { energies = data->doEnergyFixedPickOff(data->pzBuf, indexStart, curr, startTS, &pileUp); }
-    }
-    
+      
+      /* Filling histogram with locally optimized energy value... */
+      for (i=0; i<data->ledOUT.size(); i++) {
+	if (data->ledOUT[i]-startTS-3*(2*data->EM + data->EK) > 0 && data->ledOUT[i]-startTS+6*(2*data->EM + data->EK) < curr) {
+	  rawEnergy->Fill(data->doLocalPZandEnergy(data->ledOUT[i]-startTS-3*(2*data->EM + data->EK), 
+						   data->ledOUT[i]-startTS+6*(2*data->EM + data->EK), 
+						   data->ledOUT[i]-startTS, data->tau));
+	}
+      }
+      
+      data->doTrapezoid(indexStart, curr, startTS, numberOfReads);    
+      pzSum = data->doPolezeroBasic(indexStart, curr, pzSum, numberOfReads);
+      //pzSum = data->twoPolePolezero(indexStart, curr, pzSum, numberOfReads);
+      
+      /* Making this work over boundaries is going to take some thinking... */
+      if (data->useBLR) {
+	BLRcountdown = data->doBaselineRestorationCC(indexStart, curr, startTS, numberOfReads, BLRcountdown);
+	//data->doBaselineRestorationCC(indexStart, curr, startTS, numberOfReads);
+	//data->doBaselineRestorationM2(indexStart, curr, startTS, numberOfReads);
+      }
+      
+      if(data->useBLR) {
+	energies = data->doEnergyPeakFind(data->pzBLBuf, indexStart, curr, startTS, &pileUp); 
+	energiesPO = data->doEnergyFixedPickOff(data->pzBLBuf, indexStart, curr, startTS, &pileUp); 
+      } else {
+	energies = data->doEnergyPeakFind(data->pzBuf, indexStart, curr, startTS, &pileUp); 
+	energiesPO = data->doEnergyFixedPickOff(data->pzBuf, indexStart, curr, startTS, &pileUp); 
+      }
+    }    
+
     /* Write out the events in this chunk of data... */
     for (i=0; i<data->ledOUT.size(); i++) {
       g3ch.Clear();
       g3ch.timestamp = data->ledOUT[i];
       if (i*2 < energies.size()) {
 	g3ch.eRaw = energies[i*2];
+	g3ch.eCalPO = energiesPO[i*2];
+	
 	if (energies[i*2+1] == 1) { g3ch.hdr7 = 0x8000; } else { g3ch.hdr7 = 0; } /* Pile up flag... */
 	if (i >= 2) {	  
 	  g3ch.prevE1 = energies[i*2-2];
@@ -216,6 +225,7 @@ int main(int argc, char **argv) {
     }
 
     energies.clear();
+    energiesPO.clear();
     data->ledOUT.clear();
     
     startTS += (curr - overlapWidth);
@@ -225,7 +235,7 @@ int main(int argc, char **argv) {
       if (curr <= 0) { break; }
     }
 
-    if (gotsignal == 1) { numberOfReads == nReads; printf("Exiting gracefully.\n");}
+    if (gotsignal == 1) { numberOfReads = nReads+1; printf("Exiting gracefully.\n");}
   }
 
   printf("LED crossings observed = %d\n", ledCrossing);

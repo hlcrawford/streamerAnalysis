@@ -17,6 +17,16 @@ void breakhandler(int dummy) {
   gotsignal = 1;
 }
 
+Double_t doublePole(Double_t *x, Double_t *par) {
+  Float_t xx = x[0];
+  return par[0]*(par[2])*TMath::Exp(-xx/par[1]) + par[0]*(1-par[2])*TMath::Exp(-xx/par[3]) + par[4];
+}
+
+Double_t singlePole(Double_t *x, Double_t *par) {
+  Float_t xx = x[0];
+  return par[0]*TMath::Exp(-xx/par[1]) + par[2];
+}
+
 int main(int argc, char **argv) {
 
   FILE *fout;
@@ -31,10 +41,10 @@ int main(int argc, char **argv) {
   long long int ledTS = 0;
   long long int currTS = 0;
 
-  int twoPoles = 0;
+  int twoPoles = 1;
 
-  Double_t xVal[18000], yVal[18000];
-  for (i=0; i<18000; i++) { xVal[i] = i; }
+  Double_t xVal[110000], yVal[110000];
+  for (i=0; i<110000; i++) { xVal[i] = i; }
 
   if (argc < 9) {
     fprintf(stderr, "Minimum usage: getTau -fIn <input filename> -fOut <rootOutputName> -fSet <settingsName> -n <nReads> \n");
@@ -93,12 +103,16 @@ int main(int argc, char **argv) {
   
   TF1 *expofit;
   if (!twoPoles) {
-    expofit = new TF1("expofit", "expo(0)");
-    expofit->SetParameters(7, -0.00015);
-    expofit->SetParLimits(1, -0.05, -0.00005);
+    expofit = new TF1("expofit", singlePole, 0, 100000, 3);
+    expofit->SetParameters(100, 5000, 0);
+    expofit->SetParLimits(1, 2000, 8000);
   } else {
-    expofit = new TF1("expofit", "expo(0) + expo(2)");
-    expofit->SetParameters(7, -0.0003, 2, -0.00005);
+    expofit = new TF1("expofit", doublePole, 0, 100000, 5);
+    expofit->SetParameters(100, 5000, 0.9, 20000, 0);
+    expofit->SetParLimits(0, 0, 100000);
+    expofit->SetParLimits(1, 2000, 8000);
+    expofit->SetParLimits(2, 0, 1);
+    expofit->SetParLimits(3, 20, 3000000);
   }
 	
   startTS = 0;
@@ -118,31 +132,38 @@ int main(int argc, char **argv) {
     printf("numberOfReads = %d, ledCrossing = %d\r", numberOfReads, ledCrossing);
 
     for (i=0; i<data->ledOUT.size(); i++) {
-      if ( (data->ledOUT[i+1] - data->ledOUT[i]) > 11000) {
-	for (int j=0; j<10000; j++) { yVal[j] = data->wf[data->ledOUT[i] - startTS + 200 + j] - data->wf[data->ledOUT[i] - startTS - 10]; }
-	if (!twoPoles) { expofit->SetParameters(TMath::Log(yVal[1]), -0.000196); }
-	gr = new TGraph(10000, xVal, yVal);
-	gr->Fit("expofit", "Q");
-	if (!twoPoles && expofit->GetChisquare()/expofit->GetNDF() > 3000) {
-	  expofit->SetParameters(110, -0.000196);
-	  gr->Fit("expofit", "Q");
+      if ( (data->ledOUT[i+1] - data->ledOUT[i]) > 60000) {
+	for (int j=0; j<50000; j++) { yVal[j] = data->wf[data->ledOUT[i] - startTS + 200 + j]; }
+	expofit->SetParameter(0, yVal[1]);
+	expofit->SetParameter(1, 5000);
+	expofit->SetParameter(2, yVal[49999]);
+	if (twoPoles) {
+	  expofit->SetParameter(2, 0.9);
+	  expofit->SetParameter(3, 20000);
+	  expofit->SetParameter(4, yVal[49999]);
 	}
-	if (twoPoles && expofit->GetChisquare()/expofit->GetNDF() > 300) {
-	  expofit->SetParameters(7, -0.0003, 2, -0.00005);
-	  gr->Fit("expofit", "Q");
+	gr = new TGraph(50000, xVal, yVal);
+	gr->Fit("expofit", "WWQ");
+	if (!twoPoles && expofit->GetChisquare()/expofit->GetNDF() > 30000) {
+	  expofit->SetParameters(100, 5000);
+	  gr->Fit("expofit", "WWQ");
+	}
+	if (twoPoles && expofit->GetChisquare()/expofit->GetNDF() > 3000) {
+	  expofit->SetParameters(100, 5000, 0.9, 20000, 0);
+	  gr->Fit("expofit", "WWQ");
 	}
 	gr->SetName(Form("gr%d", i));
 	gr->Write();
 	if (!twoPoles) {
-	  tauValues->Fill(-1./expofit->GetParameter(1), expofit->GetChisquare()/expofit->GetNDF());
-	  printf("%d %f %f\n", i, 1./expofit->GetParameter(1), expofit->GetChisquare()/expofit->GetNDF());
+	  tauValues->Fill(expofit->GetParameter(1), expofit->GetChisquare()/expofit->GetNDF());
+	  printf("%d:\t Tau:%0.3f,\tReducedChi2:%0.1f\n", i, expofit->GetParameter(1), expofit->GetChisquare()/expofit->GetNDF());
 	} else {
-	  if (expofit->GetParameter(1) > expofit->GetParameter(3)) {
-	    tauValues->Fill(-1./expofit->GetParameter(1), -1./expofit->GetParameter(3));
+	  if (expofit->GetParameter(1) < expofit->GetParameter(3)) {
+	    tauValues->Fill(expofit->GetParameter(1), expofit->GetParameter(3));
 	  } else {
-	    tauValues->Fill(-1./expofit->GetParameter(3), -1./expofit->GetParameter(1));
+	    tauValues->Fill(expofit->GetParameter(3), expofit->GetParameter(1));
 	  }
-	  printf("%d %f %f %f \n", i, -1./expofit->GetParameter(1), -1./expofit->GetParameter(3), expofit->GetChisquare()/expofit->GetNDF());
+	  printf("%d:\tTauA: %0.3f,\tTauB:%0.3f,\tFractionA: %0.3f,\tReducedChi2:%0.1f \n", i, expofit->GetParameter(1), expofit->GetParameter(3), expofit->GetParameter(2), expofit->GetChisquare()/expofit->GetNDF());
 	}
       }
     }

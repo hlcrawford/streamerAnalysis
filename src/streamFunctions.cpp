@@ -228,7 +228,7 @@ int streamer::getLEDcrossings(int startIndex, int endIndex, int startTS) {
     if (noiseCountdown>0) { noiseCountdown--; }
     if ((ledBuf[i] >= LEDThreshold) && (ledBuf[i-1] < LEDThreshold) && (noiseCountdown==0)) {
       ledOUT.push_back(i+startTS);
-      noiseCountdown = 100;
+      noiseCountdown = 1000;
     }
   }
   return ledOUT.size();
@@ -535,6 +535,50 @@ std::vector<double> streamer::doEnergyPeakFind(double *in, int startIndex, int e
   }
 
   return energies;
+}
+
+std::vector<double> streamer::doPeakSensing(int startIndex, int endIndex, int startTS, int *pileUp) {
+  std::vector<double> energies;
+  int piledUp = 0;
+  double peak = 0;
+  
+  for (int i=0; i<ledOUT.size(); i++) {
+    peak = 0;
+    for (int j=0; j<3000; j++) {
+      if (ledOUT[i]-startTS+j < READSIZE) {
+	if (wf[ledOUT[i]-startTS+j] > peak) {
+	  peak = (double)wf[ledOUT[i]-startTS+j];
+	}
+      }
+    }
+    energies.push_back(peak - wf[ledOUT[i]-startTS-200]);
+    energies.push_back(piledUp);
+  }
+
+  return energies;
+
+}
+
+std::vector<double> streamer::doPeakIntegrate(int startIndex, int endIndex, int startTS, int *pileUp) {
+  std::vector<double> energies;
+  int piledUp = 0;
+  double peak = 0;
+  int nInt = 0;
+  
+  for (int i=0; i<ledOUT.size(); i++) {
+    peak = 0;  nInt = 0;
+    for (int j=0; j<3000; j++) {
+      if (ledOUT[i]-startTS+j < READSIZE && wf[ledOUT[i]-startTS+j] > wf[ledOUT[i]-startTS]) {
+	peak += (double)wf[ledOUT[i]-startTS+j];
+	nInt++;
+      }
+    }
+    energies.push_back(peak - wf[ledOUT[i]-startTS-200]*nInt);
+    energies.push_back(piledUp);
+  }
+
+  return energies;
+
 }
 
 std::vector<double> streamer::doEnergyFixedPickOff(double *in, int startIndex, int endIndex, int startTS, int *pileUp) {

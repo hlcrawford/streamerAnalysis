@@ -59,6 +59,8 @@ class streamer : public TObject {
   int doBaselineRestorationCC(int startIndex, int endIndex, int startTS, int first, int countdown);
   void doBaselineRestorationM2(int startIndex, int endIndex, int startTS, int first);
   std::vector<double> doEnergyPeakFind(double *in, int startIndex, int endIndex, int startTS, int *pileUp);
+  std::vector<double> doPeakSensing(int startIndex, int endIndex, int startTS, int *pileUp);
+  std::vector<double> doPeakIntegrate(int startIndex, int endIndex, int startTS, int *pileUp);
   std::vector<double> doEnergyFixedPickOff(double *in, int startIndex, int endIndex, int startTS, int *pileUp);
 
   void setTau(double itau) { tau = itau; }
