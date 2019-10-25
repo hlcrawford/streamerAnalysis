@@ -44,6 +44,17 @@ int streamer::Initialize(TString inputFileName, TString setFileName) {
 
   int num = fread(wf, sizeof(short int), READSIZE, fin);
   if (invertWF) { for (int j=0; j<READSIZE; j++) { wf[j] = -wf[j]; } }
+  
+  /* Endian swap */
+  if (0) {
+    for (int j=0; j<READSIZE; j++) {
+      uint16_t val = wf[j];
+      uint16_t b0 = (wf[j] & 0x00ff) << 8;
+      uint16_t b1 = (wf[j] & 0xff00) >> 8;
+      wf[j] = b0 | b1;
+    }
+  }
+
   bytesRead += sizeof(short int)*num;
  
   return num;
@@ -82,6 +93,18 @@ int streamer::Reset(int overlap) {
   
   int num = fread(wf+overlap, sizeof(short int), READSIZE-overlap, fin);
   if (invertWF) { for (int j=overlap; j<READSIZE; j++) { wf[j] = -wf[j]; } }
+
+  /* Endian swap */
+  if (0) {
+    for (int j=overlap; j<READSIZE; j++) {
+      uint16_t val = wf[j];
+      uint16_t b0 = (wf[j] & 0x00ff) << 8u;
+      uint16_t b1 = (wf[j] & 0xff00) >> 8u;
+      wf[j] = b0 | b1;
+    }
+  }
+
+
   bytesRead += sizeof(short int)*num;
 
   return num;
@@ -98,9 +121,9 @@ int streamer::getSettings(TString setFile) {
   float f1 = 0.0;
   
   if ((fin = fopen(setFile.Data(), "r")) == NULL) {
-    cout << ALERTTEXT;
+    std::cout << ALERTTEXT;
     printf("getSettings(): Could not open settings file \"%s\"\n", setFile.Data());
-    cout << RESET_COLOR;
+    std::cout << RESET_COLOR;
     return -1;
   } else {
     printf("getSettings(): Opened file \"%s\"\n", setFile.Data());
@@ -149,10 +172,10 @@ int streamer::getSettings(TString setFile) {
       invertWF = d1;
     } else {
       /* Unknown command */
-      cout << ALERTTEXT;
+      std::cout << ALERTTEXT;
       printf("getSettings(): Unknown command \"%s\"\n", str);
       printf("               ----> Aborting!!\n");
-      cout << RESET_COLOR;  fflush(stdout);
+      std::cout << RESET_COLOR;  fflush(stdout);
       return -1;
     }
 
@@ -169,7 +192,7 @@ int streamer::getSettings(TString setFile) {
 /**************************************************************/
 
 void streamer::reportSettings() {
-  cout << DCYAN;
+  std::cout << DCYAN;
   printf(" Analysis settings:\n");
   printf("   Tau (in 10ns clicks) = %0.2f\n", getTau());
   printf("   LED gap time = %d\n", getLEDGapTime());
@@ -187,7 +210,7 @@ void streamer::reportSettings() {
     printf("     Retrigger = %d\n", getBLRTrigger());
   }
   printf("\n\n");
-  cout << RESET_COLOR;  fflush(stdout);
+  std::cout << RESET_COLOR;  fflush(stdout);
   
 }
 
@@ -303,7 +326,7 @@ double streamer::doPolezeroBasic(int startIndex, int endIndex, double sum, int f
     else if (i == (2*EM+EK) && first == 1) { pzBuf[i] = 0.; }
     else if ((i > (2*EM+EK) && first == 1) || (first != 1)) {
       sum += (double)trapBuf[i];
-      pzBuf[i] = trapBuf[i] + sum*(1/tau);
+      pzBuf[i] = trapBuf[i] + sum*(1/tau); // tau is in clock ticks
     }
   }
 

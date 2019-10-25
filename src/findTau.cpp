@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
   long long int ledTS = 0;
   long long int currTS = 0;
 
-  int twoPoles = 1;
+  int twoPoles = 0;
 
   Double_t xVal[110000], yVal[110000];
   for (i=0; i<110000; i++) { xVal[i] = i; }
@@ -68,17 +68,17 @@ int main(int argc, char **argv) {
     } else if (strcmp(argv[i], "-n") == 0) {
       sscanf(argv[i+1], "%d", &nReads); i++; i++;
     } else {
-      cout << ALERTTEXT;
+      std::cout << ALERTTEXT;
       printf("Error -- unrecognized input flag: <%s>\n", argv[i]);
-      cout << RESET_COLOR; fflush(stdout);
+      std::cout << RESET_COLOR; fflush(stdout);
       exit(-1);
     }
   }
 
   if (!inputFile || !outputFile) {
-    cout << ALERTTEXT;
+    std::cout << ALERTTEXT;
     printf("Error -- missing arguments!  Try again!\n");
-    cout << RESET_COLOR; fflush(stdout);
+    std::cout << RESET_COLOR; fflush(stdout);
     exit(-1);
   }
   if (!setFile) {

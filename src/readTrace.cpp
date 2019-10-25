@@ -97,11 +97,23 @@ int main(int argc, char **argv) {
   g3CrystalEvent g3xtal;
   g3ChannelEvent g3ch;
   
+  /* Variables for run information and statistics... */
+  
+
   TFile *rootOUT = new TFile(rootoutputName.Data(), "RECREATE");
+  TTree *stat = new TTree("stats", "Tree - run information and stats");
+  stat->Branch("inputFile", &(inputName));
+  stat->Branch("leds", &(ledCrossing));
+  stat->Branch("tau", &(data->tau));
+  stat->Branch("useBLR", &(data->useBLR));
+  stat->Branch("BLRvalue", &(data->DV));
+  stat->Branch("EK", &(data->EK));
+  stat->Branch("EM", &(data->EM));
   TTree *teb = new TTree("teb", "Tree - with data stuff");
   teb->Branch("g3", "g3OUT", &(g3));
   
   TH1F *rawEnergy = new TH1F("rawEnergy", "rawEnergy", 300000, 0, 300000);
+  TH1F *rawTrace = new TH1F("rawTrace", "rawTrace", 65536, -32768, 32768); 
   
   /* Initialize file for chunk of waveform output */
   fout = fopen(OUTPUTFILE, "w");
@@ -127,6 +139,18 @@ int main(int argc, char **argv) {
     ledCrossings = data->getLEDcrossings(indexStart, curr, startTS);
     ledCrossing += ledCrossings;
     printf("numberOfReads = %d, ledCrossing = %d\n", numberOfReads, ledCrossing);
+
+    for (i = 0; i<curr; i++) {
+      if (data->invertWF) {
+	rawTrace->Fill(-1*data->wf[i]);
+      } else {
+	rawTrace->Fill(data->wf[i]);
+      }
+    }
+      
+    //    for (int outStuff = 0; outStuff < 10000; outStuff++) {
+      //printf ("%d -- %d\n", outStuff, data->wf[outStuff]);
+    //}  
 
     if (0) {
       //energies = data->doPeakSensing(indexStart, curr, startTS, &pileUp);
@@ -243,7 +267,10 @@ int main(int argc, char **argv) {
   printf("MB read = %d\n", data->bytesRead/(1024*1024));
 
   rawEnergy->Write();
+  rawTrace->Write();
   teb->Write();
+  stat->Fill();
+  stat->Write();
   rootOUT->Write();
   rootOUT->Close();
   
